@@ -38,6 +38,10 @@ export default function LogChoreScreen() {
     queryFn: () => getChores(true),
   });
 
+  // True when the member was pre-selected from the URL param (personal deep-link)
+  // — used to lock the UI to this member only
+  const isUrlMember = !!searchParams.get('member');
+
   // Auto-select member from ?member=ID URL param (deep-link support)
   useEffect(() => {
     const memberId = searchParams.get('member');
@@ -156,13 +160,16 @@ export default function LogChoreScreen() {
       {step === 'chore' && (
         <>
           <div style={{ marginBottom: 20 }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setStep('member')}
-              style={{ marginBottom: 12 }}
-            >
-              → חזור
-            </button>
+            {/* Hide back-to-member-select when locked to a URL member */}
+            {!isUrlMember && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setStep('member')}
+                style={{ marginBottom: 12 }}
+              >
+                → חזור
+              </button>
+            )}
             <h1 className="page-title">
               {selectedMember?.avatar_emoji} {selectedMember?.name}
             </h1>
@@ -262,7 +269,16 @@ export default function LogChoreScreen() {
             </button>
             <button
               className="btn btn-ghost btn-full"
-              onClick={() => { setStep('member'); setSelectedMember(null); setSelectedChore(null); }}
+              onClick={() => {
+                if (isUrlMember && selectedMember) {
+                  // Return to personal home page — don't expose member-select screen
+                  navigate(`/?member=${selectedMember.id}`);
+                } else {
+                  setStep('member');
+                  setSelectedMember(null);
+                  setSelectedChore(null);
+                }
+              }}
             >
               ביטול
             </button>

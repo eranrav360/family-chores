@@ -75,26 +75,28 @@ export default function DashboardScreen() {
         <p className="page-sub">שבוע {weekly.week_num} • {monthNames[monthly.month - 1]} {monthly.year}</p>
       </div>
 
-      {/* Children cards */}
+      {/* Children cards — when a member is identified show only their own card */}
       {family.length > 0 && (
         <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-          {monthly.members.map((m: MemberEntry) => {
-            const weeklyMember = weekly.members.find((x: MemberEntry) => x.id === m.id);
-            const wPts = parseInt(weeklyMember?.weekly_points ?? '0');
-            const mPts = parseInt(m.monthly_points ?? '0');
-            return (
-              <ChildCard
-                key={m.id}
-                name={m.name}
-                emoji={m.avatar_emoji}
-                weeklyPoints={wPts}
-                monthlyPoints={mPts}
-                isLeading={m.id === leadingId && wPts > 0 && family.length > 1}
-                personalWeeklyTarget={weekly.personal_target}
-                personalWeeklyAchieved={weeklyMember?.personal_achieved ?? false}
-              />
-            );
-          })}
+          {monthly.members
+            .filter((m: MemberEntry) => !activeMemberId || m.id === activeMemberId)
+            .map((m: MemberEntry) => {
+              const weeklyMember = weekly.members.find((x: MemberEntry) => x.id === m.id);
+              const wPts = parseInt(weeklyMember?.weekly_points ?? '0');
+              const mPts = parseInt(m.monthly_points ?? '0');
+              return (
+                <ChildCard
+                  key={m.id}
+                  name={m.name}
+                  emoji={m.avatar_emoji}
+                  weeklyPoints={wPts}
+                  monthlyPoints={mPts}
+                  isLeading={!activeMemberId && m.id === leadingId && wPts > 0 && family.length > 1}
+                  personalWeeklyTarget={weekly.personal_target}
+                  personalWeeklyAchieved={weeklyMember?.personal_achieved ?? false}
+                />
+              );
+            })}
         </div>
       )}
 
