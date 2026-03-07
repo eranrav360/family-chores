@@ -44,9 +44,13 @@ export default function AdminScreen() {
   // ── Goals mutations ──────────────────────────────────────────────────────
   const [weeklyTarget, setWeeklyTarget] = useState('');
   const [monthlyTarget, setMonthlyTarget] = useState('');
+  const [personalWeeklyTarget, setPersonalWeeklyTarget] = useState('');
+  const [personalMonthlyTarget, setPersonalMonthlyTarget] = useState('');
   const goalMutation = useMutation({
-    mutationFn: ({ type, val }: { type: 'weekly' | 'monthly'; val: number }) =>
-      updateGoal(type, val),
+    mutationFn: ({ type, val }: {
+      type: 'weekly' | 'monthly' | 'personal_weekly' | 'personal_monthly';
+      val: number;
+    }) => updateGoal(type, val),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       queryClient.invalidateQueries({ queryKey: ['current-periods'] });
@@ -161,8 +165,10 @@ export default function AdminScreen() {
     { id: 'links',   label: 'קישורים',icon: '🔗' },
   ];
 
-  const weeklyGoal  = goals?.find((g) => g.type === 'weekly');
-  const monthlyGoal = goals?.find((g) => g.type === 'monthly');
+  const weeklyGoal          = goals?.find((g) => g.type === 'weekly');
+  const monthlyGoal         = goals?.find((g) => g.type === 'monthly');
+  const personalWeeklyGoal  = goals?.find((g) => g.type === 'personal_weekly');
+  const personalMonthlyGoal = goals?.find((g) => g.type === 'personal_monthly');
 
   return (
     <div className="screen">
@@ -246,6 +252,59 @@ export default function AdminScreen() {
                       className="btn btn-primary btn-sm"
                       disabled={!monthlyTarget || goalMutation.isPending}
                       onClick={() => goalMutation.mutate({ type: 'monthly', val: parseInt(monthlyTarget) })}
+                    >
+                      שמור
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Personal goals */}
+              <div className="settings-group">
+                <div style={{ padding: '6px 0 10px', fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>
+                  👤 יעדים אישיים — כל ילד חייב לעמוד ביעד האישי שלו ובנוסף ביעד האחים כדי לקבל הישג
+                </div>
+                <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <div style={{ marginBottom: 8, width: '100%' }}>
+                    <div className="settings-row-label">📅 יעד אישי שבועי</div>
+                    <div className="settings-row-sub">כיום: {personalWeeklyGoal?.target_points ?? '—'} נקודות לילד</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                    <input
+                      className="input"
+                      type="number"
+                      placeholder="יעד חדש..."
+                      value={personalWeeklyTarget}
+                      onChange={(e) => setPersonalWeeklyTarget(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={!personalWeeklyTarget || goalMutation.isPending}
+                      onClick={() => goalMutation.mutate({ type: 'personal_weekly', val: parseInt(personalWeeklyTarget) })}
+                    >
+                      שמור
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <div style={{ marginBottom: 8, width: '100%' }}>
+                    <div className="settings-row-label">🗓 יעד אישי חודשי</div>
+                    <div className="settings-row-sub">כיום: {personalMonthlyGoal?.target_points ?? '—'} נקודות לילד</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                    <input
+                      className="input"
+                      type="number"
+                      placeholder="יעד חדש..."
+                      value={personalMonthlyTarget}
+                      onChange={(e) => setPersonalMonthlyTarget(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={!personalMonthlyTarget || goalMutation.isPending}
+                      onClick={() => goalMutation.mutate({ type: 'personal_monthly', val: parseInt(personalMonthlyTarget) })}
                     >
                       שמור
                     </button>

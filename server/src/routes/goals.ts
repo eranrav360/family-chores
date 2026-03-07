@@ -73,32 +73,49 @@ router.get('/current', async (_req: Request, res: Response) => {
         ),
       ]);
 
-    const goals       = goalsRes.rows;
-    const weeklyGoal  = goals.find((g) => g.type === 'weekly');
-    const monthlyGoal = goals.find((g) => g.type === 'monthly');
+    const goals               = goalsRes.rows;
+    const weeklyGoal          = goals.find((g) => g.type === 'weekly');
+    const monthlyGoal         = goals.find((g) => g.type === 'monthly');
+    const personalWeeklyGoal  = goals.find((g) => g.type === 'personal_weekly');
+    const personalMonthlyGoal = goals.find((g) => g.type === 'personal_monthly');
+    const personalWeeklyTarget  = personalWeeklyGoal?.target_points  ?? 40;
+    const personalMonthlyTarget = personalMonthlyGoal?.target_points ?? 150;
+
     const weeklyPeriod  = periodsRes.rows.find((p) => p.goal_type === 'weekly');
     const monthlyPeriod = periodsRes.rows.find((p) => p.goal_type === 'monthly');
 
+    // Annotate each member with whether they've met their personal goal
+    const weekMembersAnnotated = weekByMember.rows.map((m) => ({
+      ...m,
+      personal_achieved: parseInt(m.weekly_points) >= personalWeeklyTarget,
+    }));
+    const monthMembersAnnotated = monthByMember.rows.map((m) => ({
+      ...m,
+      personal_achieved: parseInt(m.monthly_points) >= personalMonthlyTarget,
+    }));
+
     res.json({
       weekly: {
-        target:       weeklyGoal?.target_points ?? 100,
-        current:      parseInt(weekPts.rows[0].total),
-        achieved:     weeklyPeriod?.achieved ?? false,
-        reward_chosen:weeklyPeriod?.reward_chosen ?? null,
-        period_key:   weekKey,
-        week_num:     weekNum,
-        year:         isoYear,
-        members:      weekByMember.rows,
+        target:          weeklyGoal?.target_points ?? 100,
+        current:         parseInt(weekPts.rows[0].total),
+        achieved:        weeklyPeriod?.achieved ?? false,
+        reward_chosen:   weeklyPeriod?.reward_chosen ?? null,
+        period_key:      weekKey,
+        week_num:        weekNum,
+        year:            isoYear,
+        personal_target: personalWeeklyTarget,
+        members:         weekMembersAnnotated,
       },
       monthly: {
-        target:       monthlyGoal?.target_points ?? 400,
-        current:      parseInt(monthPts.rows[0].total),
-        achieved:     monthlyPeriod?.achieved ?? false,
-        reward_chosen:monthlyPeriod?.reward_chosen ?? null,
-        period_key:   monthKey,
+        target:          monthlyGoal?.target_points ?? 400,
+        current:         parseInt(monthPts.rows[0].total),
+        achieved:        monthlyPeriod?.achieved ?? false,
+        reward_chosen:   monthlyPeriod?.reward_chosen ?? null,
+        period_key:      monthKey,
         month,
         year,
-        members:      monthByMember.rows,
+        personal_target: personalMonthlyTarget,
+        members:         monthMembersAnnotated,
       },
     });
   } catch (err) {
@@ -111,7 +128,7 @@ router.get('/current', async (_req: Request, res: Response) => {
 router.put('/:type', async (req: Request, res: Response) => {
   const { type } = req.params;
   const { target_points } = req.body;
-  if (!['weekly', 'monthly'].includes(type)) {
+  if (!['weekly', 'monthly', 'personal_weekly', 'personal_monthly'].includes(type)) {
     return res.status(400).json({ error: 'סוג מטרה לא חוקי' });
   }
   if (!target_points || Number(target_points) < 1) {

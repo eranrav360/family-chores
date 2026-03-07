@@ -94,63 +94,104 @@ router.post('/', async (req: Request, res: Response) => {
     const weekKey   = `${isoYear}-W${String(weekNum).padStart(2, '0')}`;
     const monthKey  = `${year}-${String(month).padStart(2, '0')}`;
 
-    const [weeklyPts, monthlyPts, goalsRes] = await Promise.all([
-      client.query(
-        `SELECT COALESCE(SUM(points_earned),0) AS total FROM chore_logs
-         WHERE week_number = $1 AND year = $2`, [weekNum, isoYear]
-      ),
-      client.query(
-        `SELECT COALESCE(SUM(points_earned),0) AS total FROM chore_logs
-         WHERE month_number = $1 AND year = $2`, [month, year]
-      ),
-      client.query('SELECT type, target_points FROM goals'),
-    ]);
+    const [weeklyPts, monthlyPts, goalsRes, allMembersRes, weekByMemberRes, monthByMemberRes] =
+      await Promise.all([
+        client.query(
+          `SELECT COALESCE(SUM(points_earned),0) AS total FROM chore_logs
+           WHERE week_number = $1 AND year = $2`, [weekNum, isoYear]
+        ),
+        client.query(
+          `SELECT COALESCE(SUM(points_earned),0) AS total FROM chore_logs
+           WHERE month_number = $1 AND year = $2`, [month, year]
+        ),
+        client.query('SELECT type, target_points FROM goals'),
+        client.query('SELECT id FROM family_members'),
+        client.query(
+          `SELECT family_member_id, COALESCE(SUM(points_earned),0) AS pts
+           FROM chore_logs WHERE week_number = $1 AND year = $2
+           GROUP BY family_member_id`, [weekNum, isoYear]
+        ),
+        client.query(
+          `SELECT family_member_id, COALESCE(SUM(points_earned),0) AS pts
+           FROM chore_logs WHERE month_number = $1 AND year = $2
+           GROUP BY family_member_id`, [month, year]
+        ),
+      ]);
 
     const weeklyTotal   = parseInt(weeklyPts.rows[0].total);
     const monthlyTotal  = parseInt(monthlyPts.rows[0].total);
-    const weeklyTarget  = goalsRes.rows.find((g) => g.type === 'weekly')?.target_points  ?? 100;
-    const monthlyTarget = goalsRes.rows.find((g) => g.type === 'monthly')?.target_points ?? 400;
+    const weeklyTarget          = goalsRes.rows.find((g) => g.type === 'weekly')?.target_points          ?? 100;
+    const monthlyTarget         = goalsRes.rows.find((g) => g.type === 'monthly')?.target_points         ?? 400;
+    const personalWeeklyTarget  = goalsRes.rows.find((g) => g.type === 'personal_weekly')?.target_points  ?? 40;
+    const personalMonthlyTarget = goalsRes.rows.find((g) => g.type === 'personal_monthly')?.target_points ?? 150;
+
+    // Build per-member points maps for this period
+    const weekPtsMap  = Object.fromEntries(
+      weekByMemberRes.rows.map((r) => [Number(r.family_member_id), parseInt(r.pts)])
+    );
+    const monthPtsMap = Object.fromEntries(
+      monthByMemberRes.rows.map((r) => [Number(r.family_member_id), parseInt(r.pts)])
+    );
+    const allMemberIds: number[] = allMembersRes.rows.map((r) => Number(r.id));
 
     const newAchievements: string[] = [];
 
     // ── Weekly goal achievement ──────────────────────────────────
+    // Award per-member: group goal MET  AND  member's personal goal MET
     if (weeklyTotal >= weeklyTarget) {
-      const existing = await client.query(
-        `SELECT id FROM achievements WHERE type = 'weekly_goal' AND period_key = $1`, [weekKey]
-      );
-      if (existing.rows.length === 0) {
-        await client.query(
-          `INSERT INTO achievements (family_member_id, type, period_key) VALUES ($1, 'weekly_goal', $2)`,
-          [family_member_id, weekKey]
-        );
-        await client.query(
-          `INSERT INTO goal_periods (goal_type, period_key, period_start, total_points, achieved)
-           VALUES ('weekly', $1, NOW(), $2, TRUE)
-           ON CONFLICT (goal_type, period_key) DO UPDATE SET achieved = TRUE, total_points = $2`,
-          [weekKey, weeklyTotal]
-        );
-        newAchievements.push('weekly_goal');
+      for (const memberId of allMemberIds) {
+        const memberPts = weekPtsMap[memberId] ?? 0;
+        if (memberPts >= personalWeeklyTarget) {
+          const existing = await client.query(
+            `SELECT id FROM achievements
+             WHERE family_member_id = $1 AND type = 'weekly_goal' AND period_key = $2`,
+            [memberId, weekKey]
+          );
+          if (existing.rows.length === 0) {
+            await client.query(
+              `INSERT INTO achievements (family_member_id, type, period_key)
+               VALUES ($1, 'weekly_goal', $2)`,
+              [memberId, weekKey]
+            );
+            if (memberId === Number(family_member_id)) newAchievements.push('weekly_goal');
+          }
+        }
       }
+      await client.query(
+        `INSERT INTO goal_periods (goal_type, period_key, period_start, total_points, achieved)
+         VALUES ('weekly', $1, NOW(), $2, TRUE)
+         ON CONFLICT (goal_type, period_key) DO UPDATE SET achieved = TRUE, total_points = $2`,
+        [weekKey, weeklyTotal]
+      );
     }
 
     // ── Monthly goal achievement ─────────────────────────────────
+    // Award per-member: group goal MET  AND  member's personal goal MET
     if (monthlyTotal >= monthlyTarget) {
-      const existing = await client.query(
-        `SELECT id FROM achievements WHERE type = 'monthly_goal' AND period_key = $1`, [monthKey]
-      );
-      if (existing.rows.length === 0) {
-        await client.query(
-          `INSERT INTO achievements (family_member_id, type, period_key) VALUES ($1, 'monthly_goal', $2)`,
-          [family_member_id, monthKey]
-        );
-        await client.query(
-          `INSERT INTO goal_periods (goal_type, period_key, period_start, total_points, achieved)
-           VALUES ('monthly', $1, NOW(), $2, TRUE)
-           ON CONFLICT (goal_type, period_key) DO UPDATE SET achieved = TRUE, total_points = $2`,
-          [monthKey, monthlyTotal]
-        );
-        newAchievements.push('monthly_goal');
+      for (const memberId of allMemberIds) {
+        const memberPts = monthPtsMap[memberId] ?? 0;
+        if (memberPts >= personalMonthlyTarget) {
+          const existing = await client.query(
+            `SELECT id FROM achievements
+             WHERE family_member_id = $1 AND type = 'monthly_goal' AND period_key = $2`,
+            [memberId, monthKey]
+          );
+          if (existing.rows.length === 0) {
+            await client.query(
+              `INSERT INTO achievements (family_member_id, type, period_key)
+               VALUES ($1, 'monthly_goal', $2)`,
+              [memberId, monthKey]
+            );
+            if (memberId === Number(family_member_id)) newAchievements.push('monthly_goal');
+          }
+        }
       }
+      await client.query(
+        `INSERT INTO goal_periods (goal_type, period_key, period_start, total_points, achieved)
+         VALUES ('monthly', $1, NOW(), $2, TRUE)
+         ON CONFLICT (goal_type, period_key) DO UPDATE SET achieved = TRUE, total_points = $2`,
+        [monthKey, monthlyTotal]
+      );
     }
 
     // ── "עמל רב" – 5 chores this week by this child ─────────────

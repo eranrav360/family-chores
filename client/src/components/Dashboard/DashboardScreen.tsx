@@ -64,7 +64,8 @@ export default function DashboardScreen() {
       {family.length > 0 && (
         <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
           {monthly.members.map((m: MemberEntry) => {
-            const wPts = parseInt(weekly.members.find((x: MemberEntry) => x.id === m.id)?.weekly_points ?? '0');
+            const weeklyMember = weekly.members.find((x: MemberEntry) => x.id === m.id);
+            const wPts = parseInt(weeklyMember?.weekly_points ?? '0');
             const mPts = parseInt(m.monthly_points ?? '0');
             return (
               <ChildCard
@@ -74,6 +75,8 @@ export default function DashboardScreen() {
                 weeklyPoints={wPts}
                 monthlyPoints={mPts}
                 isLeading={m.id === leadingId && wPts > 0 && family.length > 1}
+                personalWeeklyTarget={weekly.personal_target}
+                personalWeeklyAchieved={weeklyMember?.personal_achieved ?? false}
               />
             );
           })}
@@ -83,7 +86,10 @@ export default function DashboardScreen() {
       {/* Weekly goal card */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <h2 className="section-title" style={{ marginBottom: 0 }}>⭐ יעד שבועי</h2>
+          <div>
+            <h2 className="section-title" style={{ marginBottom: 2 }}>⭐ יעד שבועי אחים</h2>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>להישג: יעד אחים + יעד אישי לכל ילד</div>
+          </div>
           {weekly.achieved && !weekly.reward_chosen && (
             <button
               className="btn btn-sm btn-secondary"

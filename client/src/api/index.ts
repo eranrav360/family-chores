@@ -74,8 +74,10 @@ export const getGoals = () => apiFetch<Goal[]>('/goals');
 
 export const getCurrentPeriods = () => apiFetch<CurrentPeriods>('/goals/current');
 
-export const updateGoal = (type: 'weekly' | 'monthly', target_points: number) =>
-  apiFetch<Goal>(`/goals/${type}`, { method: 'PUT', body: JSON.stringify({ target_points }) });
+export const updateGoal = (
+  type: 'weekly' | 'monthly' | 'personal_weekly' | 'personal_monthly',
+  target_points: number
+) => apiFetch<Goal>(`/goals/${type}`, { method: 'PUT', body: JSON.stringify({ target_points }) });
 
 export const setReward = (type: string, period_key: string, reward_chosen: string) =>
   apiFetch(`/goals/periods/${type}/reward`, {

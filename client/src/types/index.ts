@@ -31,7 +31,7 @@ export interface ChoreLog {
 
 export interface Goal {
   id: number;
-  type: 'weekly' | 'monthly';
+  type: 'weekly' | 'monthly' | 'personal_weekly' | 'personal_monthly';
   target_points: number;
   updated_at: string;
 }
@@ -42,6 +42,7 @@ export interface MemberPeriodPoints {
   avatar_emoji: string;
   weekly_points?: string;
   monthly_points?: string;
+  personal_achieved?: boolean;
 }
 
 export interface PeriodData {
@@ -51,6 +52,7 @@ export interface PeriodData {
   reward_chosen: string | null;
   period_key: string;
   members: MemberPeriodPoints[];
+  personal_target: number;
 }
 
 export interface CurrentPeriods {
@@ -80,8 +82,8 @@ export interface LogChoreResponse {
 export type AchievementType = 'weekly_goal' | 'monthly_goal' | 'hard_worker';
 
 export const ACHIEVEMENT_META: Record<AchievementType, { label: string; emoji: string; desc: string }> = {
-  weekly_goal:   { label: 'שבוע מושלם',    emoji: '🌟', desc: 'השגתם את היעד השבועי!' },
-  monthly_goal:  { label: 'חודש מושלם',    emoji: '🏆', desc: 'השגתם את היעד החודשי!' },
+  weekly_goal:   { label: 'שבוע מושלם',    emoji: '🌟', desc: 'עמדת ביעד האישי וביעד האחים!' },
+  monthly_goal:  { label: 'חודש מושלם',    emoji: '🏆', desc: 'עמדת ביעד האישי וביעד האחים!' },
   hard_worker:   { label: 'עמל רב',         emoji: '💪', desc: '5 מטלות בשבוע אחד!' },
 };
 
