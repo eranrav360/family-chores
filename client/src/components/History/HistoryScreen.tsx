@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { getLogs } from '../../api';
 import { useApp } from '../../context/AppContext';
 import { DIFFICULTY_META } from '../../types';
@@ -21,9 +22,26 @@ function formatDate(iso: string) {
 }
 
 export default function HistoryScreen() {
-  const { family } = useApp();
-  const [memberFilter, setMemberFilter] = useState<number | 'all'>('all');
+  const { family, setActiveMemberId } = useApp();
+  const [searchParams] = useSearchParams();
+
+  // Read the locked member directly from the URL — this is the primary source of truth.
+  // BottomNav always appends ?member=ID when a child is active, so this works across tab changes.
+  const memberParam = searchParams.get('member');
+  const lockedMemberId = memberParam ? parseInt(memberParam, 10) : null;
+
+  // Keep context in sync so BottomNav stays correct while on this tab
+  useEffect(() => {
+    setActiveMemberId(lockedMemberId);
+  }, [lockedMemberId, setActiveMemberId]);
+
+  const [memberFilter, setMemberFilter] = useState<number | 'all'>(lockedMemberId ?? 'all');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('week');
+
+  // If the URL param changes (e.g. nav to different member link), update filter
+  useEffect(() => {
+    setMemberFilter(lockedMemberId ?? 'all');
+  }, [lockedMemberId]);
 
   const now = new Date();
   const filters: Record<string, number> = {};
@@ -43,17 +61,24 @@ export default function HistoryScreen() {
 
   const totalPoints = logs?.reduce((s, l) => s + l.points_earned, 0) ?? 0;
 
+  const activeMember = lockedMemberId
+    ? family.find((m) => m.id === lockedMemberId)
+    : null;
+
   return (
     <div className="screen">
       <div className="sticky-header">
         <div style={{ marginBottom: 12 }}>
           <h1 className="page-title">📜 היסטוריה</h1>
-          {logs && (
-            <p className="page-sub">{logs.length} מטלות • {totalPoints} נקודות</p>
-          )}
+          <p className="page-sub">
+            {activeMember
+              ? `${activeMember.avatar_emoji} ${activeMember.name}`
+              : 'כל המשפחה'}
+            {logs ? ` • ${logs.length} מטלות • ${totalPoints} נקודות` : ''}
+          </p>
         </div>
 
-        {/* Period filter */}
+        {/* Period filter — always visible */}
         <div className="filter-row">
           {(['week', 'month', 'all'] as PeriodFilter[]).map((p) => (
             <button
@@ -66,24 +91,26 @@ export default function HistoryScreen() {
           ))}
         </div>
 
-        {/* Member filter */}
-        <div className="filter-row">
-          <button
-            className={`filter-chip${memberFilter === 'all' ? ' active' : ''}`}
-            onClick={() => setMemberFilter('all')}
-          >
-            כולם
-          </button>
-          {family.map((m) => (
+        {/* Member filter — hidden when a child is identified via URL */}
+        {!lockedMemberId && (
+          <div className="filter-row">
             <button
-              key={m.id}
-              className={`filter-chip${memberFilter === m.id ? ' active' : ''}`}
-              onClick={() => setMemberFilter(m.id)}
+              className={`filter-chip${memberFilter === 'all' ? ' active' : ''}`}
+              onClick={() => setMemberFilter('all')}
             >
-              {m.avatar_emoji} {m.name}
+              כולם
             </button>
-          ))}
-        </div>
+            {family.map((m) => (
+              <button
+                key={m.id}
+                className={`filter-chip${memberFilter === m.id ? ' active' : ''}`}
+                onClick={() => setMemberFilter(m.id)}
+              >
+                {m.avatar_emoji} {m.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {isLoading && <LoadingSpinner />}

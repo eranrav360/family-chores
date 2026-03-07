@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { getAchievements } from '../../api';
 import { useApp } from '../../context/AppContext';
 import { ACHIEVEMENT_META } from '../../types';
@@ -19,40 +20,67 @@ function formatPeriodKey(key: string) {
 }
 
 export default function AchievementsScreen() {
-  const { family } = useApp();
-  const [memberFilter, setMemberFilter] = useState<number | 'all'>('all');
+  const { family, setActiveMemberId } = useApp();
+  const [searchParams] = useSearchParams();
+
+  // Read the locked member directly from the URL — primary source of truth.
+  const memberParam = searchParams.get('member');
+  const lockedMemberId = memberParam ? parseInt(memberParam, 10) : null;
+
+  // Keep context in sync so BottomNav stays correct while on this tab
+  useEffect(() => {
+    setActiveMemberId(lockedMemberId);
+  }, [lockedMemberId, setActiveMemberId]);
+
+  const [memberFilter, setMemberFilter] = useState<number | 'all'>(lockedMemberId ?? 'all');
+
+  // If the URL param changes, update filter
+  useEffect(() => {
+    setMemberFilter(lockedMemberId ?? 'all');
+  }, [lockedMemberId]);
 
   const { data: achievements, isLoading, error, refetch } = useQuery({
     queryKey: ['achievements', memberFilter],
     queryFn: () => getAchievements(memberFilter !== 'all' ? memberFilter : undefined),
   });
 
+  const activeMember = lockedMemberId
+    ? family.find((m) => m.id === lockedMemberId)
+    : null;
+
   return (
     <div className="screen">
       <div className="sticky-header">
         <div style={{ marginBottom: 12 }}>
           <h1 className="page-title">🏆 הישגים</h1>
-          <p className="page-sub">{achievements?.length ?? 0} הישגים נצברו</p>
+          <p className="page-sub">
+            {activeMember
+              ? `${activeMember.avatar_emoji} ${activeMember.name} • `
+              : ''}
+            {achievements?.length ?? 0} הישגים נצברו
+          </p>
         </div>
 
-        {/* Member filter */}
-        <div className="filter-row">
-          <button
-            className={`filter-chip${memberFilter === 'all' ? ' active' : ''}`}
-            onClick={() => setMemberFilter('all')}
-          >
-            כולם
-          </button>
-          {family.map((m) => (
+        {/* Member filter — hidden when a child is identified via URL */}
+        {!lockedMemberId && (
+          <div className="filter-row">
             <button
-              key={m.id}
-              className={`filter-chip${memberFilter === m.id ? ' active' : ''}`}
-              onClick={() => setMemberFilter(m.id)}
+              className={`filter-chip${memberFilter === 'all' ? ' active' : ''}`}
+              onClick={() => setMemberFilter('all')}
             >
-              {m.avatar_emoji} {m.name}
+              כולם
             </button>
-          ))}
-        </div>
+            {family.map((m) => (
+              <button
+                key={m.id}
+                className={`filter-chip${memberFilter === m.id ? ' active' : ''}`}
+                onClick={() => setMemberFilter(m.id)}
+              >
+                {m.avatar_emoji} {m.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {isLoading && <LoadingSpinner />}

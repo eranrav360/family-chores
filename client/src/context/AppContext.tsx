@@ -9,6 +9,8 @@ interface AppContextType {
   isAdminAuthenticated: boolean;
   setAdminAuthenticated: (val: boolean) => void;
   refreshFamily: () => Promise<void>;
+  activeMemberId: number | null;
+  setActiveMemberId: (id: number | null) => void;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -18,6 +20,8 @@ const AppContext = createContext<AppContextType>({
   isAdminAuthenticated: false,
   setAdminAuthenticated: () => {},
   refreshFamily: async () => {},
+  activeMemberId: null,
+  setActiveMemberId: () => {},
 });
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -25,6 +29,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAdminAuthenticated, setAdminAuthenticated] = useState(false);
+  const [activeMemberId, setActiveMemberId] = useState<number | null>(null);
 
   const refreshFamily = useCallback(async () => {
     try {
@@ -44,7 +49,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AppContext.Provider
-      value={{ family, loading, error, isAdminAuthenticated, setAdminAuthenticated, refreshFamily }}
+      value={{ family, loading, error, isAdminAuthenticated, setAdminAuthenticated, refreshFamily, activeMemberId, setActiveMemberId }}
     >
       {children}
     </AppContext.Provider>

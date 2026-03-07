@@ -1,12 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { getCurrentPeriods, setReward } from '../../api';
 import { useApp } from '../../context/AppContext';
 import ProgressBar from './ProgressBar';
 import ChildCard from './ChildCard';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
-import { useState } from 'react';
 
 const REWARD_OPTIONS = [
   { id: 'takeaway', icon: '🍕', title: 'בחירת אוכל לבית', desc: 'תבחרו מאיפה מזמינים ארוחה' },
@@ -15,7 +15,7 @@ const REWARD_OPTIONS = [
 ];
 
 export default function DashboardScreen() {
-  const { family } = useApp();
+  const { family, setActiveMemberId } = useApp();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -24,6 +24,11 @@ export default function DashboardScreen() {
   // Identify which member is viewing (via ?member=ID deep-link)
   const memberIdParam = searchParams.get('member');
   const activeMemberId = memberIdParam ? parseInt(memberIdParam, 10) : null;
+
+  // Persist the active member ID in context so BottomNav can use it across tabs
+  useEffect(() => {
+    setActiveMemberId(activeMemberId);
+  }, [activeMemberId, setActiveMemberId]);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['current-periods'],
@@ -59,8 +64,9 @@ export default function DashboardScreen() {
   const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
   // Personal goal data for the active member (if identified)
-  const myWeeklyMember  = activeMemberId ? weekly.members.find((m: MemberEntry) => m.id === activeMemberId)  : null;
-  const myMonthlyMember = activeMemberId ? monthly.members.find((m: MemberEntry) => m.id === activeMemberId) : null;
+  // Use Number() on m.id to guard against the API returning IDs as strings
+  const myWeeklyMember  = activeMemberId ? weekly.members.find((m: MemberEntry) => Number(m.id) === activeMemberId)  : null;
+  const myMonthlyMember = activeMemberId ? monthly.members.find((m: MemberEntry) => Number(m.id) === activeMemberId) : null;
   const myWeeklyPts     = parseInt(myWeeklyMember?.weekly_points  ?? '0');
   const myMonthlyPts    = parseInt(myMonthlyMember?.monthly_points ?? '0');
   const myName          = myWeeklyMember?.name ?? '';
@@ -79,7 +85,7 @@ export default function DashboardScreen() {
       {family.length > 0 && (
         <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
           {monthly.members
-            .filter((m: MemberEntry) => !activeMemberId || m.id === activeMemberId)
+            .filter((m: MemberEntry) => !activeMemberId || Number(m.id) === activeMemberId)
             .map((m: MemberEntry) => {
               const weeklyMember = weekly.members.find((x: MemberEntry) => x.id === m.id);
               const wPts = parseInt(weeklyMember?.weekly_points ?? '0');
@@ -91,7 +97,7 @@ export default function DashboardScreen() {
                   emoji={m.avatar_emoji}
                   weeklyPoints={wPts}
                   monthlyPoints={mPts}
-                  isLeading={!activeMemberId && m.id === leadingId && wPts > 0 && family.length > 1}
+                  isLeading={!activeMemberId && Number(m.id) === Number(leadingId) && wPts > 0 && family.length > 1}
                   personalWeeklyTarget={weekly.personal_target}
                   personalWeeklyAchieved={weeklyMember?.personal_achieved ?? false}
                 />
