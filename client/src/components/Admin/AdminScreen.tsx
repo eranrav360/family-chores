@@ -688,15 +688,15 @@ function LinksTab({ family }: { family: import('../../types').FamilyMember[] }) 
     <div>
       <div className="section-title" style={{ marginBottom: 12 }}>👧👦 קישורים לילדים</div>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-        שלח לכל ילד את הקישור שלו — הוא יפתח ישירות לתיעוד מטלה עבורו
+        שלח לכל ילד את הקישור שלו — יציג את היעדים האישיים שלו ויאפשר תיעוד מטלה
       </p>
       {family.map((m) => (
         <LinkCard
           key={m.id}
           emoji={m.avatar_emoji}
           label={m.name}
-          sub={`כניסה ישירה לתיעוד מטלה עבור ${m.name}`}
-          url={`${base}/log?member=${m.id}`}
+          sub={`דף הבית האישי עם היעדים של ${m.name}`}
+          url={`${base}/?member=${m.id}`}
           linkKey={`member-${m.id}`}
         />
       ))}

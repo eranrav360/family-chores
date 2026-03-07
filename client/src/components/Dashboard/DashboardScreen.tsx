@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getCurrentPeriods, setReward } from '../../api';
 import { useApp } from '../../context/AppContext';
 import ProgressBar from './ProgressBar';
@@ -16,7 +17,13 @@ const REWARD_OPTIONS = [
 export default function DashboardScreen() {
   const { family } = useApp();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [rewardModal, setRewardModal] = useState<'weekly' | null>(null);
+
+  // Identify which member is viewing (via ?member=ID deep-link)
+  const memberIdParam = searchParams.get('member');
+  const activeMemberId = memberIdParam ? parseInt(memberIdParam, 10) : null;
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['current-periods'],
@@ -49,8 +56,16 @@ export default function DashboardScreen() {
     weekly.members[0]
   )?.id;
 
-  const now = new Date();
   const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+
+  // Personal goal data for the active member (if identified)
+  const myWeeklyMember  = activeMemberId ? weekly.members.find((m: MemberEntry) => m.id === activeMemberId)  : null;
+  const myMonthlyMember = activeMemberId ? monthly.members.find((m: MemberEntry) => m.id === activeMemberId) : null;
+  const myWeeklyPts     = parseInt(myWeeklyMember?.weekly_points  ?? '0');
+  const myMonthlyPts    = parseInt(myMonthlyMember?.monthly_points ?? '0');
+  const myName          = myWeeklyMember?.name ?? '';
+  const myPersonalWeeklyAchieved  = myWeeklyMember?.personal_achieved  ?? false;
+  const myPersonalMonthlyAchieved = myMonthlyMember?.personal_achieved ?? false;
 
   return (
     <div className="screen">
@@ -83,11 +98,66 @@ export default function DashboardScreen() {
         </div>
       )}
 
+      {/* ── Personal goals section (only when a member is identified) ── */}
+      {activeMemberId && myWeeklyMember && (
+        <>
+          <div className="section-title" style={{ marginBottom: 10 }}>
+            👤 היעד שלי — {myName}
+          </div>
+
+          {/* Personal weekly */}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <h2 className="section-title" style={{ marginBottom: 12 }}>📅 יעד אישי שבועי</h2>
+            <ProgressBar
+              current={myWeeklyPts}
+              target={weekly.personal_target}
+              label={`${myWeeklyPts} / ${weekly.personal_target} נקודות`}
+              achieved={myPersonalWeeklyAchieved}
+            />
+            {!myPersonalWeeklyAchieved && (
+              <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
+                נותרו עוד {weekly.personal_target - myWeeklyPts} נקודות ליעד האישי השבועי
+              </div>
+            )}
+          </div>
+
+          {/* Personal monthly */}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <h2 className="section-title" style={{ marginBottom: 12 }}>🗓 יעד אישי חודשי</h2>
+            <ProgressBar
+              current={myMonthlyPts}
+              target={monthly.personal_target}
+              label={`${myMonthlyPts} / ${monthly.personal_target} נקודות`}
+              achieved={myPersonalMonthlyAchieved}
+            />
+            {!myPersonalMonthlyAchieved && (
+              <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
+                נותרו עוד {monthly.personal_target - myMonthlyPts} נקודות ליעד האישי החודשי
+              </div>
+            )}
+          </div>
+
+          {/* Quick log button for the identified member */}
+          <button
+            className="btn btn-primary btn-full"
+            style={{ marginBottom: 20, fontSize: 16 }}
+            onClick={() => navigate(`/log?member=${activeMemberId}`)}
+          >
+            ✅ תיעוד מטלה
+          </button>
+        </>
+      )}
+
+      {/* ── Siblings group goals ── */}
+      <div className="section-title" style={{ marginBottom: 10 }}>
+        👫 יעד האחים
+      </div>
+
       {/* Weekly goal card */}
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
-            <h2 className="section-title" style={{ marginBottom: 2 }}>⭐ יעד שבועי אחים</h2>
+            <h2 className="section-title" style={{ marginBottom: 2 }}>⭐ יעד שבועי</h2>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>להישג: יעד אחים + יעד אישי לכל ילד</div>
           </div>
           {weekly.achieved && !weekly.reward_chosen && (
@@ -112,14 +182,14 @@ export default function DashboardScreen() {
         )}
         {!weekly.achieved && (
           <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-            נותרו עוד {weekly.target - weekly.current} נקודות להשלמת היעד השבועי
+            נותרו עוד {weekly.target - weekly.current} נקודות להשלמת יעד האחים
           </div>
         )}
       </div>
 
       {/* Monthly goal card */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <h2 className="section-title">🏆 יעד חודשי</h2>
+        <h2 className="section-title" style={{ marginBottom: 12 }}>🏆 יעד חודשי</h2>
         <ProgressBar
           current={monthly.current}
           target={monthly.target}

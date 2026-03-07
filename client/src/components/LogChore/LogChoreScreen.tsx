@@ -101,9 +101,10 @@ export default function LogChoreScreen() {
     if (postAnimationUrl) {
       window.location.href = postAnimationUrl;
     } else {
-      navigate('/');
+      // Return to home with member param so dashboard stays personalised
+      navigate(selectedMember ? `/?member=${selectedMember.id}` : '/');
     }
-  }, [navigate, postAnimationUrl]);
+  }, [navigate, postAnimationUrl, selectedMember]);
 
   // Group chores by difficulty
   const choresByDifficulty = chores
