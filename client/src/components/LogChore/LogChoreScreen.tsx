@@ -31,6 +31,7 @@ export default function LogChoreScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [animation, setAnimation] = useState<AnimationData | null>(null);
+  const [postAnimationUrl, setPostAnimationUrl] = useState<string | null>(null);
 
   const { data: chores, isLoading: choresLoading } = useQuery({
     queryKey: ['chores-active'],
@@ -73,6 +74,13 @@ export default function LogChoreScreen() {
       queryClient.invalidateQueries({ queryKey: ['logs'] });
       queryClient.invalidateQueries({ queryKey: ['achievements'] });
 
+      // If dog-walking chore → queue redirect to waffle-walks after animation
+      const isDogWalk = selectedChore.name.includes('הוצאת הכלב');
+      if (isDogWalk) {
+        const nameHash = encodeURIComponent(selectedMember.name.slice(0, 3));
+        setPostAnimationUrl(`https://waffle-walks.vercel.app/#${nameHash}`);
+      }
+
       // Show animation
       setAnimation({
         memberEmoji: selectedMember.avatar_emoji,
@@ -90,8 +98,12 @@ export default function LogChoreScreen() {
 
   const handleAnimationDone = useCallback(() => {
     setAnimation(null);
-    navigate('/');
-  }, [navigate]);
+    if (postAnimationUrl) {
+      window.location.href = postAnimationUrl;
+    } else {
+      navigate('/');
+    }
+  }, [navigate, postAnimationUrl]);
 
   // Group chores by difficulty
   const choresByDifficulty = chores
