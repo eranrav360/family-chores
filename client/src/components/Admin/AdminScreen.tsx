@@ -14,7 +14,7 @@ import ErrorMessage from '../common/ErrorMessage';
 
 const AVATAR_OPTIONS = ['🦁','🐯','🐼','🐸','🦊','🐶','🐱','🦄','🐻','🐨','🐰','🦋','🌸','⭐','🌈','🎮','⚽','🎨','🚀','🦸','🧸','🎪','🏆','🐲'];
 
-type AdminTab = 'goals' | 'chores' | 'members' | 'security';
+type AdminTab = 'goals' | 'chores' | 'members' | 'security' | 'links';
 
 export default function AdminScreen() {
   const { isAdminAuthenticated, authenticate, logout, verifying, pinError, setPinError } = useAdminAuth();
@@ -158,6 +158,7 @@ export default function AdminScreen() {
     { id: 'chores',  label: 'מטלות',  icon: '📋' },
     { id: 'members', label: 'ילדים',  icon: '👨‍👩‍👧‍👦' },
     { id: 'security',label: 'אבטחה',  icon: '🔐' },
+    { id: 'links',   label: 'קישורים',icon: '🔗' },
   ];
 
   const weeklyGoal  = goals?.find((g) => g.type === 'weekly');
@@ -561,7 +562,103 @@ export default function AdminScreen() {
         </div>
       )}
 
+      {/* ── LINKS TAB ─────────────────────────────────────────────── */}
+      {tab === 'links' && (
+        <LinksTab family={family} />
+      )}
+
       <div style={{ height: 20 }} />
+    </div>
+  );
+}
+
+// ── Links tab component ──────────────────────────────────────────────────────
+function LinksTab({ family }: { family: import('../../types').FamilyMember[] }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const base = window.location.origin;
+
+  const copy = (url: string, key: string) => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
+
+  const LinkCard = ({
+    emoji, label, sub, url, linkKey,
+  }: {
+    emoji: string; label: string; sub: string; url: string; linkKey: string;
+  }) => (
+    <div className="card" style={{ marginBottom: 14, padding: '16px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+        <span style={{ fontSize: 36 }}>{emoji}</span>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 17 }}>{label}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{sub}</div>
+        </div>
+      </div>
+      <div style={{
+        background: 'var(--bg)', borderRadius: 8, padding: '8px 12px',
+        fontSize: 12, color: 'var(--text-muted)', wordBreak: 'break-all',
+        marginBottom: 10, fontFamily: 'monospace', direction: 'ltr', textAlign: 'left',
+      }}>
+        {url}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          className="btn btn-primary btn-sm"
+          style={{ flex: 1 }}
+          onClick={() => copy(url, linkKey)}
+        >
+          {copied === linkKey ? '✅ הועתק!' : '📋 העתק קישור'}
+        </button>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-secondary btn-sm"
+          style={{ flex: 1, textDecoration: 'none', textAlign: 'center' }}
+        >
+          🔗 פתח
+        </a>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="section-title" style={{ marginBottom: 12 }}>👧👦 קישורים לילדים</div>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+        שלח לכל ילד את הקישור שלו — הוא יפתח ישירות לתיעוד מטלה עבורו
+      </p>
+      {family.map((m) => (
+        <LinkCard
+          key={m.id}
+          emoji={m.avatar_emoji}
+          label={m.name}
+          sub={`כניסה ישירה לתיעוד מטלה עבור ${m.name}`}
+          url={`${base}/log?member=${m.id}`}
+          linkKey={`member-${m.id}`}
+        />
+      ))}
+
+      <div className="section-title" style={{ marginBottom: 12, marginTop: 8 }}>👨‍👩‍👧 קישור להורים</div>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+        כניסה לפאנל הניהול — ידרוש קוד PIN
+      </p>
+      <LinkCard
+        emoji="⚙️"
+        label="פאנל הורים"
+        sub="ניהול מטלות, יעדים, ילדים ואבטחה"
+        url={`${base}/admin`}
+        linkKey="admin"
+      />
+
+      <div className="card" style={{ background: 'var(--warning-bg, #fff8e1)', border: '1px solid var(--warning, #ffd54f)', marginTop: 8 }}>
+        <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>
+          <strong>💡 טיפ:</strong> שמור את קישורי הילדים כסימניות בדפדפן שלהם, או הוסף לדף הבית של הטלפון שלהם (Add to Home Screen) לגישה מהירה כמו אפליקציה.
+        </div>
+      </div>
     </div>
   );
 }

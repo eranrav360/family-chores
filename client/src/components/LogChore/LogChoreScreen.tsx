@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getChores, logChore } from '../../api';
 import { useApp } from '../../context/AppContext';
 import type { Chore, FamilyMember } from '../../types';
@@ -23,6 +23,7 @@ export default function LogChoreScreen() {
   const { family } = useApp();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
 
   const [step, setStep] = useState<Step>('member');
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
@@ -35,6 +36,18 @@ export default function LogChoreScreen() {
     queryKey: ['chores-active'],
     queryFn: () => getChores(true),
   });
+
+  // Auto-select member from ?member=ID URL param (deep-link support)
+  useEffect(() => {
+    const memberId = searchParams.get('member');
+    if (memberId && family.length > 0 && step === 'member') {
+      const member = family.find((m) => m.id === parseInt(memberId, 10));
+      if (member) {
+        setSelectedMember(member);
+        setStep('chore');
+      }
+    }
+  }, [searchParams, family]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMemberSelect = (member: FamilyMember) => {
     setSelectedMember(member);
