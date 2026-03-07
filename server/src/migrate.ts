@@ -13,7 +13,7 @@ export async function runMigrations() {
       )
     `);
 
-    const migrationsDir = path.join(__dirname, '../../migrations');
+    const migrationsDir = path.join(__dirname, '../migrations');
     if (!fs.existsSync(migrationsDir)) {
       console.log('No migrations directory found, skipping.');
       return;
