@@ -34,6 +34,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const refreshFamily = useCallback(async () => {
     try {
       setError(null);
+      // Fire a lightweight wake-up ping to /health so the Render server starts
+      // warming up immediately (fire-and-forget — errors are intentionally ignored).
+      const apiBase = (import.meta as { env: Record<string, string> }).env.VITE_API_URL || '/api';
+      const healthUrl = apiBase.replace(/\/api\/?$/, '/health');
+      fetch(healthUrl).catch(() => {});
       const members = await getFamily();
       setFamily(members);
     } catch (err) {
