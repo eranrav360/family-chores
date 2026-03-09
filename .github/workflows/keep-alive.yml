@@ -13,6 +13,6 @@ jobs:
     steps:
       - name: Ping health endpoint
         run: |
-          curl -fsS --max-time 60 https://family-chores-server.onrender.com/health \
+          curl -fsS --max-time 60 https://family-chores-nbg3.onrender.com/api/family \
             && echo "✅ Server is up" \
             || echo "⚠️ Server did not respond in time (cold start?)"
