@@ -3,19 +3,22 @@ import pool from '../db';
 
 const router = Router();
 
-/** Returns ISO week number and ISO year for a given date */
-function getISOWeekData(date: Date): { weekNum: number; isoYear: number } {
+/** Week number with Sunday as week start (Israeli calendar).
+ *  Weeks are assigned to the year containing their Saturday. */
+function getSundayWeekData(date: Date): { weekNum: number; isoYear: number } {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
-  // Thursday in current week decides the year
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-  const week1 = new Date(d.getFullYear(), 0, 4);
-  const weekNum =
-    1 +
-    Math.round(
-      ((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
-    );
-  return { weekNum, isoYear: d.getFullYear() };
+  // Move back to the Sunday of this week
+  d.setDate(d.getDate() - d.getDay());
+  // The week belongs to the year of its Saturday
+  const saturday = new Date(d);
+  saturday.setDate(d.getDate() + 6);
+  const isoYear = saturday.getFullYear();
+  // Week 1 starts on the Sunday that contains Jan 1 of that year
+  const jan1 = new Date(isoYear, 0, 1);
+  const week1Start = new Date(isoYear, 0, 1 - jan1.getDay());
+  const weekNum = Math.floor((d.getTime() - week1Start.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return { weekNum, isoYear };
 }
 
 // GET chore logs with optional filters — always scoped to the current family
@@ -82,7 +85,7 @@ router.post('/', async (req: Request, res: Response) => {
     const chore = choreResult.rows[0];
 
     const now = new Date();
-    const { weekNum, isoYear } = getISOWeekData(now);
+    const { weekNum, isoYear } = getSundayWeekData(now);
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
