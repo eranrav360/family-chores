@@ -18,7 +18,7 @@ function getISOWeekData(date: Date): { weekNum: number; isoYear: number } {
   return { weekNum, isoYear: d.getFullYear() };
 }
 
-// GET chore logs with optional filters
+// GET chore logs with optional filters — always scoped to the current family
 router.get('/', async (req: Request, res: Response) => {
   const { member_id, week, month, year } = req.query;
   try {
@@ -39,10 +39,10 @@ router.get('/', async (req: Request, res: Response) => {
       FROM chore_logs cl
       JOIN family_members fm ON fm.id = cl.family_member_id
       LEFT JOIN chores c ON c.id = cl.chore_id
-      WHERE 1=1
+      WHERE fm.family_id = $1
     `;
-    const params: (string | number)[] = [];
-    let idx = 1;
+    const params: (string | number)[] = [req.family.id];
+    let idx = 2;
 
     if (member_id) { query += ` AND cl.family_member_id = $${idx++}`; params.push(Number(member_id)); }
     if (week)      { query += ` AND cl.week_number = $${idx++}`;       params.push(Number(week)); }
@@ -65,12 +65,16 @@ router.post('/', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'בן משפחה ומטלה הם שדות חובה' });
   }
 
+  const familyId = req.family.id;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Load chore
-    const choreResult = await client.query('SELECT * FROM chores WHERE id = $1 AND active = TRUE', [chore_id]);
+    // Load chore — must belong to this family
+    const choreResult = await client.query(
+      'SELECT * FROM chores WHERE id = $1 AND active = TRUE AND family_id = $2',
+      [chore_id, familyId]
+    );
     if (choreResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'מטלה לא נמצאה' });
@@ -97,24 +101,34 @@ router.post('/', async (req: Request, res: Response) => {
     const [weeklyPts, monthlyPts, goalsRes, allMembersRes, weekByMemberRes, monthByMemberRes] =
       await Promise.all([
         client.query(
-          `SELECT COALESCE(SUM(points_earned),0) AS total FROM chore_logs
-           WHERE week_number = $1 AND year = $2`, [weekNum, isoYear]
+          `SELECT COALESCE(SUM(cl.points_earned),0) AS total FROM chore_logs cl
+           JOIN family_members fm ON fm.id = cl.family_member_id
+           WHERE fm.family_id = $3 AND cl.week_number = $1 AND cl.year = $2`,
+          [weekNum, isoYear, familyId]
         ),
         client.query(
-          `SELECT COALESCE(SUM(points_earned),0) AS total FROM chore_logs
-           WHERE month_number = $1 AND year = $2`, [month, year]
+          `SELECT COALESCE(SUM(cl.points_earned),0) AS total FROM chore_logs cl
+           JOIN family_members fm ON fm.id = cl.family_member_id
+           WHERE fm.family_id = $3 AND cl.month_number = $1 AND cl.year = $2`,
+          [month, year, familyId]
         ),
-        client.query('SELECT type, target_points FROM goals'),
-        client.query('SELECT id FROM family_members'),
+        client.query('SELECT type, target_points FROM goals WHERE family_id = $1', [familyId]),
+        client.query('SELECT id FROM family_members WHERE family_id = $1', [familyId]),
         client.query(
-          `SELECT family_member_id, COALESCE(SUM(points_earned),0) AS pts
-           FROM chore_logs WHERE week_number = $1 AND year = $2
-           GROUP BY family_member_id`, [weekNum, isoYear]
+          `SELECT cl.family_member_id, COALESCE(SUM(cl.points_earned),0) AS pts
+           FROM chore_logs cl
+           JOIN family_members fm ON fm.id = cl.family_member_id
+           WHERE fm.family_id = $3 AND cl.week_number = $1 AND cl.year = $2
+           GROUP BY cl.family_member_id`,
+          [weekNum, isoYear, familyId]
         ),
         client.query(
-          `SELECT family_member_id, COALESCE(SUM(points_earned),0) AS pts
-           FROM chore_logs WHERE month_number = $1 AND year = $2
-           GROUP BY family_member_id`, [month, year]
+          `SELECT cl.family_member_id, COALESCE(SUM(cl.points_earned),0) AS pts
+           FROM chore_logs cl
+           JOIN family_members fm ON fm.id = cl.family_member_id
+           WHERE fm.family_id = $3 AND cl.month_number = $1 AND cl.year = $2
+           GROUP BY cl.family_member_id`,
+          [month, year, familyId]
         ),
       ]);
 
@@ -158,10 +172,10 @@ router.post('/', async (req: Request, res: Response) => {
         }
       }
       await client.query(
-        `INSERT INTO goal_periods (goal_type, period_key, period_start, total_points, achieved)
-         VALUES ('weekly', $1, NOW(), $2, TRUE)
-         ON CONFLICT (goal_type, period_key) DO UPDATE SET achieved = TRUE, total_points = $2`,
-        [weekKey, weeklyTotal]
+        `INSERT INTO goal_periods (goal_type, period_key, period_start, total_points, achieved, family_id)
+         VALUES ('weekly', $1, NOW(), $2, TRUE, $3)
+         ON CONFLICT (family_id, goal_type, period_key) DO UPDATE SET achieved = TRUE, total_points = $2`,
+        [weekKey, weeklyTotal, familyId]
       );
     }
 
@@ -187,10 +201,10 @@ router.post('/', async (req: Request, res: Response) => {
         }
       }
       await client.query(
-        `INSERT INTO goal_periods (goal_type, period_key, period_start, total_points, achieved)
-         VALUES ('monthly', $1, NOW(), $2, TRUE)
-         ON CONFLICT (goal_type, period_key) DO UPDATE SET achieved = TRUE, total_points = $2`,
-        [monthKey, monthlyTotal]
+        `INSERT INTO goal_periods (goal_type, period_key, period_start, total_points, achieved, family_id)
+         VALUES ('monthly', $1, NOW(), $2, TRUE, $3)
+         ON CONFLICT (family_id, goal_type, period_key) DO UPDATE SET achieved = TRUE, total_points = $2`,
+        [monthKey, monthlyTotal, familyId]
       );
     }
 

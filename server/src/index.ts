@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Router, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
@@ -9,6 +9,8 @@ import logRoutes from './routes/logs';
 import goalRoutes from './routes/goals';
 import achievementRoutes from './routes/achievements';
 import adminRoutes from './routes/admin';
+import familiesRoutes from './routes/families';
+import { familyMiddleware } from './middleware/family';
 
 dotenv.config();
 
@@ -23,13 +25,20 @@ app.use(
 );
 app.use(express.json());
 
-// Routes
-app.use('/api/family', familyRoutes);
-app.use('/api/chores', choreRoutes);
-app.use('/api/logs', logRoutes);
-app.use('/api/goals', goalRoutes);
-app.use('/api/achievements', achievementRoutes);
-app.use('/api/admin', adminRoutes);
+// Family lookup / creation (no auth middleware)
+app.use('/api/families', familiesRoutes);
+
+// All family-scoped routes — resolved by familyMiddleware
+const familyScopedRouter = Router({ mergeParams: true });
+familyScopedRouter.use(familyMiddleware as express.RequestHandler);
+familyScopedRouter.use('/family',       familyRoutes);
+familyScopedRouter.use('/chores',       choreRoutes);
+familyScopedRouter.use('/logs',         logRoutes);
+familyScopedRouter.use('/goals',        goalRoutes);
+familyScopedRouter.use('/achievements', achievementRoutes);
+familyScopedRouter.use('/admin',        adminRoutes);
+
+app.use('/api/f/:familyCode', familyScopedRouter);
 
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   getGoals, updateGoal, getChores, createChore, updateChore, deleteChore,
   changePin, resetPeriod, getCurrentPeriods, updateMember, deleteMember, createMember,
+  changeFamilyCode,
 } from '../../api';
 import { useApp } from '../../context/AppContext';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
@@ -18,7 +20,10 @@ type AdminTab = 'goals' | 'chores' | 'members' | 'security' | 'links';
 
 export default function AdminScreen() {
   const { isAdminAuthenticated, authenticate, logout, verifying, pinError, setPinError } = useAdminAuth();
-  const { family, refreshFamily } = useApp();
+  const { family, refreshFamily, familyCode, setFamilyCode } = useApp();
+  const { familyCode: urlCode } = useParams<{ familyCode: string }>();
+  const fc = familyCode || urlCode || '';
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<AdminTab>('goals');
   const [globalError, setGlobalError] = useState<string | null>(null);
@@ -26,19 +31,19 @@ export default function AdminScreen() {
 
   // ── Data queries ─────────────────────────────────────────────────────────
   const { data: goals, isLoading: goalsLoading } = useQuery({
-    queryKey: ['goals'],
-    queryFn: getGoals,
-    enabled: isAdminAuthenticated,
+    queryKey: ['goals', fc],
+    queryFn: () => getGoals(fc),
+    enabled: isAdminAuthenticated && !!fc,
   });
   const { data: chores, isLoading: choresLoading } = useQuery({
-    queryKey: ['chores-all'],
-    queryFn: () => getChores(),
-    enabled: isAdminAuthenticated,
+    queryKey: ['chores-all', fc],
+    queryFn: () => getChores(fc),
+    enabled: isAdminAuthenticated && !!fc,
   });
   const { data: periods } = useQuery({
-    queryKey: ['current-periods'],
-    queryFn: getCurrentPeriods,
-    enabled: isAdminAuthenticated,
+    queryKey: ['current-periods', fc],
+    queryFn: () => getCurrentPeriods(fc),
+    enabled: isAdminAuthenticated && !!fc,
   });
 
   // ── Goals mutations ──────────────────────────────────────────────────────
@@ -50,10 +55,10 @@ export default function AdminScreen() {
     mutationFn: ({ type, val }: {
       type: 'weekly' | 'monthly' | 'personal_weekly' | 'personal_monthly';
       val: number;
-    }) => updateGoal(type, val),
+    }) => updateGoal(fc, type, val),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
-      queryClient.invalidateQueries({ queryKey: ['current-periods'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', fc] });
+      queryClient.invalidateQueries({ queryKey: ['current-periods', fc] });
       flash('success', 'היעד עודכן בהצלחה ✅');
     },
     onError: (e: Error) => flash('error', e.message),
@@ -64,30 +69,30 @@ export default function AdminScreen() {
   const [editChore, setEditChore] = useState<Chore | null>(null);
 
   const createChoreMutation = useMutation({
-    mutationFn: createChore,
+    mutationFn: (data: { name: string; difficulty: string; points: number }) => createChore(fc, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chores-all'] });
-      queryClient.invalidateQueries({ queryKey: ['chores-active'] });
+      queryClient.invalidateQueries({ queryKey: ['chores-all', fc] });
+      queryClient.invalidateQueries({ queryKey: ['chores-active', fc] });
       setNewChore({ name: '', difficulty: 'easy', points: 5 });
       flash('success', 'מטלה נוספה ✅');
     },
     onError: (e: Error) => flash('error', e.message),
   });
   const updateChoreMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Chore> }) => updateChore(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Partial<Chore> }) => updateChore(fc, id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chores-all'] });
-      queryClient.invalidateQueries({ queryKey: ['chores-active'] });
+      queryClient.invalidateQueries({ queryKey: ['chores-all', fc] });
+      queryClient.invalidateQueries({ queryKey: ['chores-active', fc] });
       setEditChore(null);
       flash('success', 'מטלה עודכנה ✅');
     },
     onError: (e: Error) => flash('error', e.message),
   });
   const deleteChoreMutation = useMutation({
-    mutationFn: deleteChore,
+    mutationFn: (id: number) => deleteChore(fc, id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chores-all'] });
-      queryClient.invalidateQueries({ queryKey: ['chores-active'] });
+      queryClient.invalidateQueries({ queryKey: ['chores-all', fc] });
+      queryClient.invalidateQueries({ queryKey: ['chores-active', fc] });
       flash('success', 'מטלה הוסרה ✅');
     },
     onError: (e: Error) => flash('error', e.message),
@@ -100,22 +105,22 @@ export default function AdminScreen() {
 
   const updateMemberMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: { name: string; avatar_emoji: string } }) =>
-      updateMember(id, data),
+      updateMember(fc, id, data),
     onSuccess: () => {
       refreshFamily();
-      queryClient.invalidateQueries({ queryKey: ['current-periods'] });
+      queryClient.invalidateQueries({ queryKey: ['current-periods', fc] });
       setEditMember(null);
       flash('success', 'פרטי הילד עודכנו ✅');
     },
     onError: (e: Error) => flash('error', e.message),
   });
   const deleteMemberMutation = useMutation({
-    mutationFn: deleteMember,
+    mutationFn: (id: number) => deleteMember(fc, id),
     onSuccess: () => { refreshFamily(); flash('success', 'הילד הוסר ✅'); },
     onError: (e: Error) => flash('error', e.message),
   });
   const createMemberMutation = useMutation({
-    mutationFn: createMember,
+    mutationFn: (data: { name: string; avatar_emoji: string }) => createMember(fc, data),
     onSuccess: () => {
       refreshFamily();
       setNewMember({ name: '', avatar_emoji: '🦁' });
@@ -129,18 +134,32 @@ export default function AdminScreen() {
   const [oldPin, setOldPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const pinMutation = useMutation({
-    mutationFn: () => changePin(oldPin, newPin),
+    mutationFn: () => changePin(fc, oldPin, newPin),
     onSuccess: () => { setOldPin(''); setNewPin(''); flash('success', 'קוד PIN שונה ✅'); },
+    onError: (e: Error) => flash('error', e.message),
+  });
+
+  // ── Family code change ───────────────────────────────────────────────────
+  const [newCode, setNewCode] = useState('');
+  const codeMutation = useMutation({
+    mutationFn: () => changeFamilyCode(fc, newCode.trim().toLowerCase()),
+    onSuccess: (data) => {
+      setNewCode('');
+      flash('success', `קוד שונה ל-${data.code} ✅`);
+      // Update context + navigate to new URL
+      setFamilyCode(data.code);
+      navigate(`/${data.code}/admin`, { replace: true });
+    },
     onError: (e: Error) => flash('error', e.message),
   });
 
   // ── Reset mutations ──────────────────────────────────────────────────────
   const resetMutation = useMutation({
-    mutationFn: ({ type, pk }: { type: string; pk: string }) => resetPeriod(type, pk),
+    mutationFn: ({ type, pk }: { type: string; pk: string }) => resetPeriod(fc, type, pk),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['current-periods'] });
-      queryClient.invalidateQueries({ queryKey: ['logs'] });
-      queryClient.invalidateQueries({ queryKey: ['achievements'] });
+      queryClient.invalidateQueries({ queryKey: ['current-periods', fc] });
+      queryClient.invalidateQueries({ queryKey: ['logs', fc] });
+      queryClient.invalidateQueries({ queryKey: ['achievements', fc] });
       flash('success', 'התקופה אופסה ✅');
     },
     onError: (e: Error) => flash('error', e.message),
@@ -586,44 +605,77 @@ export default function AdminScreen() {
 
       {/* ── SECURITY TAB ──────────────────────────────────────────── */}
       {tab === 'security' && (
-        <div className="settings-group">
-          <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
-            <div>
-              <div className="settings-row-label">🔐 שינוי קוד PIN</div>
-              <div className="settings-row-sub">קוד ברירת מחדל: 1234</div>
+        <>
+          <div className="settings-group">
+            <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+              <div>
+                <div className="settings-row-label">🔐 שינוי קוד PIN</div>
+                <div className="settings-row-sub">קוד ברירת מחדל: 1234</div>
+              </div>
+              <input
+                className="input"
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="קוד נוכחי"
+                value={oldPin}
+                onChange={(e) => setOldPin(e.target.value)}
+              />
+              <input
+                className="input"
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="קוד חדש (4 ספרות)"
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value)}
+              />
+              <button
+                className="btn btn-primary btn-full"
+                disabled={oldPin.length < 4 || newPin.length < 4 || pinMutation.isPending}
+                onClick={() => pinMutation.mutate()}
+              >
+                {pinMutation.isPending ? 'משנה...' : 'שנה קוד PIN'}
+              </button>
             </div>
-            <input
-              className="input"
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="קוד נוכחי"
-              value={oldPin}
-              onChange={(e) => setOldPin(e.target.value)}
-            />
-            <input
-              className="input"
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="קוד חדש (4 ספרות)"
-              value={newPin}
-              onChange={(e) => setNewPin(e.target.value)}
-            />
-            <button
-              className="btn btn-primary btn-full"
-              disabled={oldPin.length < 4 || newPin.length < 4 || pinMutation.isPending}
-              onClick={() => pinMutation.mutate()}
-            >
-              {pinMutation.isPending ? 'משנה...' : 'שנה קוד PIN'}
-            </button>
           </div>
-        </div>
+
+          <div className="settings-group">
+            <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+              <div>
+                <div className="settings-row-label">🔑 קוד משפחה</div>
+                <div className="settings-row-sub">
+                  קוד נוכחי: <strong dir="ltr">{fc}</strong>
+                </div>
+              </div>
+              <input
+                className="input"
+                type="text"
+                placeholder="קוד חדש..."
+                value={newCode}
+                onChange={(e) => setNewCode(e.target.value.toLowerCase())}
+                dir="ltr"
+                style={{ textAlign: 'left' }}
+              />
+              <button
+                className="btn btn-primary btn-full"
+                disabled={!newCode.trim() || codeMutation.isPending}
+                onClick={() => {
+                  if (confirm(`לשנות את קוד המשפחה ל-"${newCode.trim()}"? כל הקישורים הישנים יפסיקו לעבוד!`)) {
+                    codeMutation.mutate();
+                  }
+                }}
+              >
+                {codeMutation.isPending ? 'משנה...' : 'שנה קוד משפחה'}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── LINKS TAB ─────────────────────────────────────────────── */}
       {tab === 'links' && (
-        <LinksTab family={family} />
+        <LinksTab family={family} familyCode={fc} />
       )}
 
       <div style={{ height: 20 }} />
@@ -632,7 +684,7 @@ export default function AdminScreen() {
 }
 
 // ── Links tab component ──────────────────────────────────────────────────────
-function LinksTab({ family }: { family: import('../../types').FamilyMember[] }) {
+function LinksTab({ family, familyCode }: { family: import('../../types').FamilyMember[]; familyCode: string }) {
   const [copied, setCopied] = useState<string | null>(null);
   const base = window.location.origin;
 
@@ -696,7 +748,7 @@ function LinksTab({ family }: { family: import('../../types').FamilyMember[] }) 
           emoji={m.avatar_emoji}
           label={m.name}
           sub={`דף הבית האישי עם היעדים של ${m.name}`}
-          url={`${base}/?member=${m.id}`}
+          url={`${base}/${familyCode}?member=${m.id}`}
           linkKey={`member-${m.id}`}
         />
       ))}
@@ -709,7 +761,7 @@ function LinksTab({ family }: { family: import('../../types').FamilyMember[] }) 
         emoji="⚙️"
         label="פאנל הורים"
         sub="ניהול מטלות, יעדים, ילדים ואבטחה"
-        url={`${base}/admin`}
+        url={`${base}/${familyCode}/admin`}
         linkKey="admin"
       />
 

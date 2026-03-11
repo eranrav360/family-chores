@@ -1,3 +1,10 @@
+export interface Family {
+  id: number;
+  name: string;
+  code: string;
+  created_at: string;
+}
+
 export interface FamilyMember {
   id: number;
   name: string;

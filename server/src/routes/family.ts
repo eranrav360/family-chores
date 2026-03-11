@@ -4,9 +4,12 @@ import pool from '../db';
 const router = Router();
 
 // GET all family members
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM family_members ORDER BY id');
+    const { rows } = await pool.query(
+      'SELECT * FROM family_members WHERE family_id = $1 ORDER BY id',
+      [req.family.id]
+    );
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -22,8 +25,8 @@ router.post('/', async (req: Request, res: Response) => {
   }
   try {
     const { rows } = await pool.query(
-      'INSERT INTO family_members (name, avatar_emoji) VALUES ($1, $2) RETURNING *',
-      [name.trim(), avatar_emoji]
+      'INSERT INTO family_members (name, avatar_emoji, family_id) VALUES ($1, $2, $3) RETURNING *',
+      [name.trim(), avatar_emoji, req.family.id]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -41,8 +44,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
   try {
     const { rows } = await pool.query(
-      'UPDATE family_members SET name = $1, avatar_emoji = $2 WHERE id = $3 RETURNING *',
-      [name.trim(), avatar_emoji, id]
+      'UPDATE family_members SET name = $1, avatar_emoji = $2 WHERE id = $3 AND family_id = $4 RETURNING *',
+      [name.trim(), avatar_emoji, id, req.family.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'בן משפחה לא נמצא' });
     res.json(rows[0]);
@@ -56,7 +59,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    await pool.query('DELETE FROM family_members WHERE id = $1', [id]);
+    await pool.query('DELETE FROM family_members WHERE id = $1 AND family_id = $2', [id, req.family.id]);
     res.json({ success: true });
   } catch (err) {
     console.error(err);

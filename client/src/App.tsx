@@ -1,9 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import BottomNav from './components/common/BottomNav';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import ErrorMessage from './components/common/ErrorMessage';
+import LandingScreen from './components/Landing/LandingScreen';
 import SetupScreen from './components/Setup/SetupScreen';
 import DashboardScreen from './components/Dashboard/DashboardScreen';
 import LogChoreScreen from './components/LogChore/LogChoreScreen';
@@ -19,23 +20,30 @@ const WAKE_MESSAGES = [
   { after: 35, text: 'כמעט שם! Render מתעורר לאט 🐢' },
 ];
 
-function AppRoutes() {
-  const { family, loading, error, refreshFamily } = useApp();
+// Resolves /:familyCode from the URL, syncs to context, and renders the family app
+function FamilyLoader() {
+  const { familyCode: urlFamilyCode } = useParams<{ familyCode: string }>();
+  const { familyCode: contextFamilyCode, setFamilyCode, loading, error, refreshFamily } = useApp();
   const [elapsed, setElapsed] = useState(0);
 
-  // Tick every second while loading
+  // Sync URL familyCode → context (triggers refreshFamily via useEffect in context)
   useEffect(() => {
-    if (!loading) return;
+    if (urlFamilyCode && urlFamilyCode !== contextFamilyCode) {
+      setFamilyCode(urlFamilyCode);
+    }
+  }, [urlFamilyCode, contextFamilyCode, setFamilyCode]);
+
+  // Loading timer for progressive messages
+  useEffect(() => {
+    if (!loading) { setElapsed(0); return; }
     const t = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [loading]);
 
   if (loading) {
-    // Pick the most recent message whose threshold has been passed
     const msg = [...WAKE_MESSAGES]
       .reverse()
       .find((m) => elapsed >= m.after)?.text ?? WAKE_MESSAGES[0].text;
-
     const isSlow = elapsed >= 12;
 
     return (
@@ -71,7 +79,6 @@ function AppRoutes() {
           </div>
         )}
 
-        {/* Progress bar that fills over 60 seconds */}
         {isSlow && (
           <div
             style={{
@@ -103,10 +110,7 @@ function AppRoutes() {
       <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <div style={{ width: '100%', maxWidth: 400 }}>
           <div style={{ textAlign: 'center', fontSize: 48, marginBottom: 16 }}>😕</div>
-          <ErrorMessage
-            message={error}
-            onRetry={refreshFamily}
-          />
+          <ErrorMessage message={error} onRetry={refreshFamily} />
           <p style={{ textAlign: 'center', fontSize: 14, color: 'var(--text-muted)', marginTop: 12 }}>
             ודא שהשרת רץ ושכתובת ה-API נכונה
           </p>
@@ -115,28 +119,28 @@ function AppRoutes() {
     );
   }
 
-  // First-launch: no family members yet
-  if (family.length === 0) {
-    return (
-      <Routes>
-        <Route path="/setup" element={<SetupScreen />} />
-        <Route path="*"      element={<Navigate to="/setup" replace />} />
-      </Routes>
-    );
-  }
-
   return (
     <div className="app">
       <Routes>
-        <Route path="/"             element={<DashboardScreen />} />
-        <Route path="/log"          element={<LogChoreScreen />} />
-        <Route path="/history"      element={<HistoryScreen />} />
-        <Route path="/achievements" element={<AchievementsScreen />} />
-        <Route path="/admin"        element={<AdminScreen />} />
-        <Route path="*"             element={<Navigate to="/" replace />} />
+        <Route index element={<DashboardScreen />} />
+        <Route path="log"          element={<LogChoreScreen />} />
+        <Route path="history"      element={<HistoryScreen />} />
+        <Route path="achievements" element={<AchievementsScreen />} />
+        <Route path="admin"        element={<AdminScreen />} />
+        <Route path="*"            element={<Navigate to="" replace />} />
       </Routes>
       <BottomNav />
     </div>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/"              element={<LandingScreen />} />
+      <Route path="/create"        element={<SetupScreen />} />
+      <Route path="/:familyCode/*" element={<FamilyLoader />} />
+    </Routes>
   );
 }
 

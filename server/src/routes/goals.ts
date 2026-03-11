@@ -14,9 +14,12 @@ function getISOWeekData(date: Date): { weekNum: number; isoYear: number } {
 }
 
 // GET goals config
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM goals ORDER BY type');
+    const { rows } = await pool.query(
+      'SELECT * FROM goals WHERE family_id = $1 ORDER BY type',
+      [req.family.id]
+    );
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -25,7 +28,8 @@ router.get('/', async (_req: Request, res: Response) => {
 });
 
 // GET current week + month period data (dashboard use)
-router.get('/current', async (_req: Request, res: Response) => {
+router.get('/current', async (req: Request, res: Response) => {
+  const familyId = req.family.id;
   try {
     const now = new Date();
     const { weekNum, isoYear } = getISOWeekData(now);
@@ -36,14 +40,18 @@ router.get('/current', async (_req: Request, res: Response) => {
 
     const [goalsRes, weekPts, monthPts, weekByMember, monthByMember, periodsRes] =
       await Promise.all([
-        pool.query('SELECT * FROM goals'),
+        pool.query('SELECT * FROM goals WHERE family_id = $1', [familyId]),
         pool.query(
-          `SELECT COALESCE(SUM(points_earned),0) AS total FROM chore_logs
-           WHERE week_number = $1 AND year = $2`, [weekNum, isoYear]
+          `SELECT COALESCE(SUM(cl.points_earned),0) AS total FROM chore_logs cl
+           JOIN family_members fm ON fm.id = cl.family_member_id
+           WHERE fm.family_id = $3 AND cl.week_number = $1 AND cl.year = $2`,
+          [weekNum, isoYear, familyId]
         ),
         pool.query(
-          `SELECT COALESCE(SUM(points_earned),0) AS total FROM chore_logs
-           WHERE month_number = $1 AND year = $2`, [month, year]
+          `SELECT COALESCE(SUM(cl.points_earned),0) AS total FROM chore_logs cl
+           JOIN family_members fm ON fm.id = cl.family_member_id
+           WHERE fm.family_id = $3 AND cl.month_number = $1 AND cl.year = $2`,
+          [month, year, familyId]
         ),
         pool.query(
           `SELECT fm.id, fm.name, fm.avatar_emoji,
@@ -52,8 +60,10 @@ router.get('/current', async (_req: Request, res: Response) => {
            LEFT JOIN chore_logs cl
              ON cl.family_member_id = fm.id
              AND cl.week_number = $1 AND cl.year = $2
+           WHERE fm.family_id = $3
            GROUP BY fm.id, fm.name, fm.avatar_emoji
-           ORDER BY fm.id`, [weekNum, isoYear]
+           ORDER BY fm.id`,
+          [weekNum, isoYear, familyId]
         ),
         pool.query(
           `SELECT fm.id, fm.name, fm.avatar_emoji,
@@ -62,14 +72,17 @@ router.get('/current', async (_req: Request, res: Response) => {
            LEFT JOIN chore_logs cl
              ON cl.family_member_id = fm.id
              AND cl.month_number = $1 AND cl.year = $2
+           WHERE fm.family_id = $3
            GROUP BY fm.id, fm.name, fm.avatar_emoji
-           ORDER BY fm.id`, [month, year]
+           ORDER BY fm.id`,
+          [month, year, familyId]
         ),
         pool.query(
           `SELECT * FROM goal_periods
-           WHERE (goal_type = 'weekly'  AND period_key = $1)
-              OR (goal_type = 'monthly' AND period_key = $2)`,
-          [weekKey, monthKey]
+           WHERE family_id = $3
+             AND ((goal_type = 'weekly'  AND period_key = $1)
+               OR (goal_type = 'monthly' AND period_key = $2))`,
+          [weekKey, monthKey, familyId]
         ),
       ]);
 
@@ -136,8 +149,8 @@ router.put('/:type', async (req: Request, res: Response) => {
   }
   try {
     const { rows } = await pool.query(
-      `UPDATE goals SET target_points = $1, updated_at = NOW() WHERE type = $2 RETURNING *`,
-      [target_points, type]
+      `UPDATE goals SET target_points = $1, updated_at = NOW() WHERE type = $2 AND family_id = $3 RETURNING *`,
+      [target_points, type, req.family.id]
     );
     res.json(rows[0]);
   } catch (err) {
@@ -152,11 +165,11 @@ router.put('/periods/:type/reward', async (req: Request, res: Response) => {
   const { period_key, reward_chosen } = req.body;
   try {
     const { rows } = await pool.query(
-      `INSERT INTO goal_periods (goal_type, period_key, period_start, achieved, reward_chosen)
-       VALUES ($1, $2, NOW(), TRUE, $3)
-       ON CONFLICT (goal_type, period_key)
+      `INSERT INTO goal_periods (goal_type, period_key, period_start, achieved, reward_chosen, family_id)
+       VALUES ($1, $2, NOW(), TRUE, $3, $4)
+       ON CONFLICT (family_id, goal_type, period_key)
        DO UPDATE SET reward_chosen = $3 RETURNING *`,
-      [type, period_key, reward_chosen]
+      [type, period_key, reward_chosen, req.family.id]
     );
     res.json(rows[0]);
   } catch (err) {

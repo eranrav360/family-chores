@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useParams } from 'react-router-dom';
 import { getAchievements } from '../../api';
 import { useApp } from '../../context/AppContext';
 import { ACHIEVEMENT_META } from '../../types';
@@ -20,7 +20,9 @@ function formatPeriodKey(key: string) {
 }
 
 export default function AchievementsScreen() {
-  const { family, setActiveMemberId } = useApp();
+  const { family, setActiveMemberId, familyCode } = useApp();
+  const { familyCode: urlCode } = useParams<{ familyCode: string }>();
+  const fc = familyCode || urlCode || '';
   const [searchParams] = useSearchParams();
 
   // Read the locked member directly from the URL — primary source of truth.
@@ -40,8 +42,9 @@ export default function AchievementsScreen() {
   }, [lockedMemberId]);
 
   const { data: achievements, isLoading, error, refetch } = useQuery({
-    queryKey: ['achievements', memberFilter],
-    queryFn: () => getAchievements(memberFilter !== 'all' ? memberFilter : undefined),
+    queryKey: ['achievements', fc, memberFilter],
+    queryFn: () => getAchievements(fc, memberFilter !== 'all' ? memberFilter : undefined),
+    enabled: !!fc,
   });
 
   const activeMember = lockedMemberId

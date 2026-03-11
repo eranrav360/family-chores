@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { getChores, logChore } from '../../api';
 import { useApp } from '../../context/AppContext';
 import type { Chore, FamilyMember } from '../../types';
@@ -20,7 +20,9 @@ interface AnimationData {
 }
 
 export default function LogChoreScreen() {
-  const { family } = useApp();
+  const { family, familyCode } = useApp();
+  const { familyCode: urlCode } = useParams<{ familyCode: string }>();
+  const fc = familyCode || urlCode || '';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
@@ -34,12 +36,12 @@ export default function LogChoreScreen() {
   const [postAnimationUrl, setPostAnimationUrl] = useState<string | null>(null);
 
   const { data: chores, isLoading: choresLoading } = useQuery({
-    queryKey: ['chores-active'],
-    queryFn: () => getChores(true),
+    queryKey: ['chores-active', fc],
+    queryFn: () => getChores(fc, true),
+    enabled: !!fc,
   });
 
   // True when the member was pre-selected from the URL param (personal deep-link)
-  // — used to lock the UI to this member only
   const isUrlMember = !!searchParams.get('member');
 
   // Auto-select member from ?member=ID URL param (deep-link support)
@@ -69,14 +71,14 @@ export default function LogChoreScreen() {
     setLoading(true);
     setError(null);
     try {
-      const result = await logChore({
+      const result = await logChore(fc, {
         family_member_id: selectedMember.id,
         chore_id: selectedChore.id,
       });
       // Invalidate related queries
-      queryClient.invalidateQueries({ queryKey: ['current-periods'] });
-      queryClient.invalidateQueries({ queryKey: ['logs'] });
-      queryClient.invalidateQueries({ queryKey: ['achievements'] });
+      queryClient.invalidateQueries({ queryKey: ['current-periods', fc] });
+      queryClient.invalidateQueries({ queryKey: ['logs', fc] });
+      queryClient.invalidateQueries({ queryKey: ['achievements', fc] });
 
       // If dog-walking chore → queue redirect to waffle-walks after animation
       const isDogWalk = selectedChore.name.includes('הוצאת הכלב');
@@ -106,9 +108,9 @@ export default function LogChoreScreen() {
       window.location.href = postAnimationUrl;
     } else {
       // Return to home with member param so dashboard stays personalised
-      navigate(selectedMember ? `/?member=${selectedMember.id}` : '/');
+      navigate(selectedMember ? `/${fc}?member=${selectedMember.id}` : `/${fc}`);
     }
-  }, [navigate, postAnimationUrl, selectedMember]);
+  }, [navigate, fc, postAnimationUrl, selectedMember]);
 
   // Group chores by difficulty
   const choresByDifficulty = chores
@@ -271,8 +273,7 @@ export default function LogChoreScreen() {
               className="btn btn-ghost btn-full"
               onClick={() => {
                 if (isUrlMember && selectedMember) {
-                  // Return to personal home page — don't expose member-select screen
-                  navigate(`/?member=${selectedMember.id}`);
+                  navigate(`/${fc}?member=${selectedMember.id}`);
                 } else {
                   setStep('member');
                   setSelectedMember(null);

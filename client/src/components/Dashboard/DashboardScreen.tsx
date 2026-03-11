@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { getCurrentPeriods, setReward } from '../../api';
 import { useApp } from '../../context/AppContext';
@@ -15,7 +15,9 @@ const REWARD_OPTIONS = [
 ];
 
 export default function DashboardScreen() {
-  const { family, setActiveMemberId } = useApp();
+  const { family, setActiveMemberId, familyCode } = useApp();
+  const { familyCode: urlCode } = useParams<{ familyCode: string }>();
+  const fc = familyCode || urlCode || '';
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -31,16 +33,17 @@ export default function DashboardScreen() {
   }, [activeMemberId, setActiveMemberId]);
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['current-periods'],
-    queryFn: getCurrentPeriods,
+    queryKey: ['current-periods', fc],
+    queryFn: () => getCurrentPeriods(fc),
     refetchInterval: 30_000,
+    enabled: !!fc,
   });
 
   const rewardMutation = useMutation({
     mutationFn: ({ period_key, reward }: { period_key: string; reward: string }) =>
-      setReward('weekly', period_key, reward),
+      setReward(fc, 'weekly', period_key, reward),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['current-periods'] });
+      queryClient.invalidateQueries({ queryKey: ['current-periods', fc] });
       setRewardModal(null);
     },
   });
@@ -63,8 +66,6 @@ export default function DashboardScreen() {
 
   const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
-  // Personal goal data for the active member (if identified)
-  // Use Number() on m.id to guard against the API returning IDs as strings
   const myWeeklyMember  = activeMemberId ? weekly.members.find((m: MemberEntry) => Number(m.id) === activeMemberId)  : null;
   const myMonthlyMember = activeMemberId ? monthly.members.find((m: MemberEntry) => Number(m.id) === activeMemberId) : null;
   const myWeeklyPts     = parseInt(myWeeklyMember?.weekly_points  ?? '0');
@@ -149,7 +150,7 @@ export default function DashboardScreen() {
           <button
             className="btn btn-primary btn-full"
             style={{ marginBottom: 20, fontSize: 16 }}
-            onClick={() => navigate(`/log?member=${activeMemberId}`)}
+            onClick={() => navigate(`/${fc}/log?member=${activeMemberId}`)}
           >
             ✅ תיעוד מטלה
           </button>

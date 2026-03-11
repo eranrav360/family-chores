@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useParams } from 'react-router-dom';
 import { getLogs } from '../../api';
 import { useApp } from '../../context/AppContext';
 import { DIFFICULTY_META } from '../../types';
@@ -22,11 +22,12 @@ function formatDate(iso: string) {
 }
 
 export default function HistoryScreen() {
-  const { family, setActiveMemberId } = useApp();
+  const { family, setActiveMemberId, familyCode } = useApp();
+  const { familyCode: urlCode } = useParams<{ familyCode: string }>();
+  const fc = familyCode || urlCode || '';
   const [searchParams] = useSearchParams();
 
   // Read the locked member directly from the URL — this is the primary source of truth.
-  // BottomNav always appends ?member=ID when a child is active, so this works across tab changes.
   const memberParam = searchParams.get('member');
   const lockedMemberId = memberParam ? parseInt(memberParam, 10) : null;
 
@@ -38,7 +39,7 @@ export default function HistoryScreen() {
   const [memberFilter, setMemberFilter] = useState<number | 'all'>(lockedMemberId ?? 'all');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('week');
 
-  // If the URL param changes (e.g. nav to different member link), update filter
+  // If the URL param changes, update filter
   useEffect(() => {
     setMemberFilter(lockedMemberId ?? 'all');
   }, [lockedMemberId]);
@@ -55,8 +56,9 @@ export default function HistoryScreen() {
   }
 
   const { data: logs, isLoading, error, refetch } = useQuery({
-    queryKey: ['logs', memberFilter, periodFilter],
-    queryFn: () => getLogs(Object.keys(filters).length ? filters : undefined),
+    queryKey: ['logs', fc, memberFilter, periodFilter],
+    queryFn: () => getLogs(fc, Object.keys(filters).length ? filters : undefined),
+    enabled: !!fc,
   });
 
   const totalPoints = logs?.reduce((s, l) => s + l.points_earned, 0) ?? 0;

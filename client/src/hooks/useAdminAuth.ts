@@ -3,15 +3,16 @@ import { verifyPin } from '../api';
 import { useState } from 'react';
 
 export function useAdminAuth() {
-  const { isAdminAuthenticated, setAdminAuthenticated } = useApp();
+  const { isAdminAuthenticated, setAdminAuthenticated, familyCode } = useApp();
   const [verifying, setVerifying] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
 
   const authenticate = async (pin: string): Promise<boolean> => {
+    if (!familyCode) { setPinError('שגיאה פנימית'); return false; }
     setVerifying(true);
     setPinError(null);
     try {
-      await verifyPin(pin);
+      await verifyPin(familyCode, pin);
       setAdminAuthenticated(true);
       return true;
     } catch (err) {

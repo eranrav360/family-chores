@@ -7,12 +7,13 @@ const router = Router();
 router.get('/', async (req: Request, res: Response) => {
   const { active } = req.query;
   try {
-    let query = 'SELECT * FROM chores';
+    let query = 'SELECT * FROM chores WHERE family_id = $1';
+    const params: (string | number)[] = [req.family.id];
     if (active === 'true') {
-      query += ' WHERE active = TRUE';
+      query += ' AND active = TRUE';
     }
     query += ' ORDER BY CASE difficulty WHEN \'easy\' THEN 1 WHEN \'medium\' THEN 2 WHEN \'hard\' THEN 3 END, name';
-    const { rows } = await pool.query(query);
+    const { rows } = await pool.query(query, params);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -31,8 +32,8 @@ router.post('/', async (req: Request, res: Response) => {
   }
   try {
     const { rows } = await pool.query(
-      'INSERT INTO chores (name, difficulty, points) VALUES ($1, $2, $3) RETURNING *',
-      [name.trim(), difficulty, points]
+      'INSERT INTO chores (name, difficulty, points, family_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name.trim(), difficulty, points, req.family.id]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -52,8 +53,8 @@ router.put('/:id', async (req: Request, res: Response) => {
            difficulty = COALESCE($2, difficulty),
            points = COALESCE($3, points),
            active = COALESCE($4, active)
-       WHERE id = $5 RETURNING *`,
-      [name?.trim() ?? null, difficulty ?? null, points ?? null, active ?? null, id]
+       WHERE id = $5 AND family_id = $6 RETURNING *`,
+      [name?.trim() ?? null, difficulty ?? null, points ?? null, active ?? null, id, req.family.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'מטלה לא נמצאה' });
     res.json(rows[0]);
@@ -67,7 +68,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    await pool.query('UPDATE chores SET active = FALSE WHERE id = $1', [id]);
+    await pool.query('UPDATE chores SET active = FALSE WHERE id = $1 AND family_id = $2', [id, req.family.id]);
     res.json({ success: true });
   } catch (err) {
     console.error(err);

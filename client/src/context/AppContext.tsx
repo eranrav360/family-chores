@@ -3,6 +3,8 @@ import { getFamily } from '../api';
 import type { FamilyMember } from '../types';
 
 interface AppContextType {
+  familyCode: string | null;
+  setFamilyCode: (code: string | null) => void;
   family: FamilyMember[];
   loading: boolean;
   error: string | null;
@@ -14,8 +16,10 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType>({
+  familyCode: null,
+  setFamilyCode: () => {},
   family: [],
-  loading: true,
+  loading: false,
   error: null,
   isAdminAuthenticated: false,
   setAdminAuthenticated: () => {},
@@ -25,36 +29,52 @@ const AppContext = createContext<AppContextType>({
 });
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [familyCode, setFamilyCode] = useState<string | null>(null);
   const [family, setFamily] = useState<FamilyMember[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAdminAuthenticated, setAdminAuthenticated] = useState(false);
   const [activeMemberId, setActiveMemberId] = useState<number | null>(null);
 
   const refreshFamily = useCallback(async () => {
+    if (!familyCode) return;
+    setLoading(true);
+    setError(null);
     try {
-      setError(null);
-      // Fire a lightweight wake-up ping to /health so the Render server starts
-      // warming up immediately (fire-and-forget — errors are intentionally ignored).
+      // Fire a lightweight wake-up ping so the Render server starts warming up
+      // immediately (fire-and-forget — errors are intentionally ignored).
       const apiBase = (import.meta as { env: Record<string, string> }).env.VITE_API_URL || '/api';
       const healthUrl = apiBase.replace(/\/api\/?$/, '/health');
       fetch(healthUrl).catch(() => {});
-      const members = await getFamily();
+      const members = await getFamily(familyCode);
       setFamily(members);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה בטעינת נתוני המשפחה');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [familyCode]);
 
   useEffect(() => {
-    refreshFamily();
-  }, [refreshFamily]);
+    if (familyCode) {
+      refreshFamily();
+    }
+  }, [familyCode, refreshFamily]);
 
   return (
     <AppContext.Provider
-      value={{ family, loading, error, isAdminAuthenticated, setAdminAuthenticated, refreshFamily, activeMemberId, setActiveMemberId }}
+      value={{
+        familyCode,
+        setFamilyCode,
+        family,
+        loading,
+        error,
+        isAdminAuthenticated,
+        setAdminAuthenticated,
+        refreshFamily,
+        activeMemberId,
+        setActiveMemberId,
+      }}
     >
       {children}
     </AppContext.Provider>
