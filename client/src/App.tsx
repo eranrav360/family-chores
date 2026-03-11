@@ -11,6 +11,7 @@ import LogChoreScreen from './components/LogChore/LogChoreScreen';
 import HistoryScreen from './components/History/HistoryScreen';
 import AchievementsScreen from './components/Achievements/AchievementsScreen';
 import AdminScreen from './components/Admin/AdminScreen';
+import SuperAdminScreen from './components/SuperAdmin/SuperAdminScreen';
 
 const WAKE_MESSAGES = [
   { after: 0,  text: 'טוען מטלות הבית...' },
@@ -139,6 +140,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/"              element={<LandingScreen />} />
       <Route path="/create"        element={<SetupScreen />} />
+      <Route path="/superadmin"    element={<SuperAdminScreen />} />
       <Route path="/:familyCode/*" element={<FamilyLoader />} />
     </Routes>
   );

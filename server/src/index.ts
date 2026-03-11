@@ -10,6 +10,7 @@ import goalRoutes from './routes/goals';
 import achievementRoutes from './routes/achievements';
 import adminRoutes from './routes/admin';
 import familiesRoutes from './routes/families';
+import superadminRoutes from './routes/superadmin';
 import { familyMiddleware } from './middleware/family';
 
 dotenv.config();
@@ -27,6 +28,9 @@ app.use(express.json());
 
 // Family lookup / creation (no auth middleware)
 app.use('/api/families', familiesRoutes);
+
+// Super-admin (protected by SUPER_ADMIN_KEY env var)
+app.use('/api/superadmin', superadminRoutes);
 
 // All family-scoped routes — resolved by familyMiddleware
 const familyScopedRouter = Router({ mergeParams: true });
