@@ -228,8 +228,8 @@
 <script>
   // ── Map setup ──────────────────────────────────────────────────────────────
   const map = L.map('map', {
-    center: [31.5, 34.9],
-    zoom: 7,
+    center: [31.8, 35.2],
+    zoom: 8,
     zoomControl: true,
   });
 
@@ -480,14 +480,27 @@
   }
 
   // ── Polling ────────────────────────────────────────────────────────────────
+  // Normalise any oref-style response (raw or wrapped) into { alert }
+  function normaliseOrefResponse(d) {
+    if (!d) return { alert: null };
+    // Already wrapped: { alert: {...} }
+    if ('alert' in d) return d;
+    // Raw oref format: { id, cat, title, data, desc }
+    if (d.data && Array.isArray(d.data) && d.data.length > 0) return { alert: d };
+    return { alert: null };
+  }
+
   async function fetchAlertData() {
     if (cfWorkerUrl) {
       try {
         const r = await fetch(cfWorkerUrl, { cache: 'no-store' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const d = await r.json();
+        // oref returns empty body when quiet; Worker passes it through
+        const text = await r.text();
+        const trimmed = text.trim();
         updateProxyIndicator('cf');
-        return d;
+        if (!trimmed || trimmed.length < 5) return { alert: null };
+        return normaliseOrefResponse(JSON.parse(trimmed));
       } catch (e) {
         console.warn('[oref] CF Worker failed:', e.message, '— trying Vercel fallback');
       }
@@ -545,12 +558,14 @@
       const t0 = Date.now();
       const r = await fetch(testUrl, { cache: 'no-store' });
       const ms = Date.now() - t0;
-      const body = await r.json();
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const hasAlert = body.alert && body.alert.data && body.alert.data.length > 0;
+      const text = await r.text();
+      const trimmed = text.trim();
+      const parsed = (trimmed && trimmed.length >= 5) ? JSON.parse(trimmed) : null;
+      const { alert: activeAlert } = normaliseOrefResponse(parsed);
       resultEl.style.cssText = 'display:block;font-size:11px;padding:7px 10px;border-radius:6px;margin-bottom:10px;direction:ltr;word-break:break-all;background:#0e2a1a;color:#44cc88;';
-      if (hasAlert) {
-        resultEl.textContent = `✓ Worker עובד! (${ms}ms) — יש התרעה פעילה: ${body.alert.data.slice(0,3).join(', ')}…`;
+      if (activeAlert) {
+        resultEl.textContent = `✓ Worker עובד! (${ms}ms) — יש התרעה פעילה: ${activeAlert.data.slice(0,3).join(', ')}`;
       } else {
         resultEl.textContent = `✓ Worker עובד! (${ms}ms) — אין התרעות פעילות כרגע`;
       }
