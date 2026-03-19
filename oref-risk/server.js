@@ -122,6 +122,12 @@ app.get('/api/locations', async (req, res) => {
 
 // ── Real-time alerts ──────────────────────────────────────────────────────────
 
+// Israel UTC offset: +02:00 (standard/winter) or +03:00 (DST/summer, Apr–Oct)
+function israelOffset() {
+  const m = new Date().getMonth(); // 0-indexed
+  return (m >= 3 && m <= 9) ? '+03:00' : '+02:00';
+}
+
 // Primary: try www.oref.org.il (works locally / Israeli IPs)
 function fetchOrefDirect() {
   return new Promise((resolve) => {
@@ -148,7 +154,7 @@ function fetchOrefDirect() {
 }
 
 // Fallback: derive "live" alerts from history API (not geo-blocked).
-// Fetches last 24h, returns alerts from the last 15 min as a pseudo-live feed.
+// Fetches last 24h, returns the most recent attack burst if within 30 min.
 function fetchRealtimeFromHistory() {
   return new Promise((resolve) => {
     const options = {
@@ -168,23 +174,27 @@ function fetchRealtimeFromHistory() {
           const alerts = data.length > 2 ? JSON.parse(data) : [];
           if (!alerts.length) { resolve(null); return; }
 
-          // Sort newest-first by rid (sequential ID)
+          const offset = israelOffset();
+
+          // Sort newest-first; filter to attack categories FIRST so we don't
+          // anchor to a cat-10 "all-clear" record and miss the actual attack.
           const sorted = [...alerts].sort((a, b) => b.rid - a.rid);
-          const latest = sorted[0];
+          const attackSorted = sorted.filter(a => a.category === 1 || a.category === 6);
+          if (!attackSorted.length) { resolve(null); return; }
 
-          // alertDate is in Israeli time (UTC+2 winter / UTC+3 summer).
-          // Parse with +02:00 and allow a 15-min window (covers DST shift too).
-          const latestMs = new Date(latest.alertDate.replace(' ', 'T') + '+02:00').getTime();
+          const latest = attackSorted[0];
+          const latestMs = new Date(latest.alertDate.replace(' ', 'T') + offset).getTime();
           const nowMs = Date.now();
-          const FIFTEEN_MIN = 15 * 60 * 1000;
+          // 30-min window — covers history-API lag (can be 5-15 min behind live)
+          const THIRTY_MIN = 30 * 60 * 1000;
 
-          if (nowMs - latestMs > FIFTEEN_MIN) { resolve(null); return; }
+          if (nowMs - latestMs > THIRTY_MIN) { resolve(null); return; }
 
-          // Collect cities from the same burst (within 90 s of the latest alert)
-          const BURST = 90 * 1000;
-          const recent = sorted.filter(a => {
-            const t = new Date(a.alertDate.replace(' ', 'T') + '+02:00').getTime();
-            return (latestMs - t) <= BURST && (a.category === 1 || a.category === 6);
+          // Collect cities from the same burst (within 5 min of the latest attack)
+          const BURST = 5 * 60 * 1000;
+          const recent = attackSorted.filter(a => {
+            const t = new Date(a.alertDate.replace(' ', 'T') + offset).getTime();
+            return Math.abs(latestMs - t) <= BURST;
           });
           const cities = [...new Set(recent.map(a => a.data))];
           if (!cities.length) { resolve(null); return; }
@@ -202,9 +212,53 @@ function fetchRealtimeFromHistory() {
   });
 }
 
+// Third source: tzevaadom community mirror (real-time, not geo-blocked)
+function fetchTzevaadom() {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'api.tzevaadom.co.il',
+      path: '/alerts',
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/json',
+      }
+    };
+    https.get(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          // May return [] or [{ cities: [...], threat: N }] or similar
+          if (!result || (Array.isArray(result) && result.length === 0)) {
+            resolve(null); return;
+          }
+          // Normalise to the same shape as the oref direct API
+          if (Array.isArray(result)) {
+            const first = result[0];
+            const cities = first.cities || first.data || first.alerts || [];
+            if (!cities.length) { resolve(null); return; }
+            resolve({
+              id: `tz-${Date.now()}`,
+              cat: String(first.threat || first.cat || first.category || '1'),
+              title: first.title || 'התרעה',
+              data: cities,
+              desc: first.desc || '',
+            });
+          } else {
+            resolve(null);
+          }
+        } catch { resolve(null); }
+      });
+    }).on('error', () => resolve(null));
+  });
+}
+
 async function fetchRealtimeAlerts() {
-  const direct = await fetchOrefDirect();
+  // Race all three sources; return first non-null result
+  const [direct, tzevaadom] = await Promise.all([fetchOrefDirect(), fetchTzevaadom()]);
   if (direct) return direct;
+  if (tzevaadom) return tzevaadom;
   return fetchRealtimeFromHistory();
 }
 
@@ -215,6 +269,61 @@ app.get('/api/realtime', async (req, res) => {
   } catch {
     res.json({ alert: null });
   }
+});
+
+// Debug endpoint — returns raw responses from all three sources so we can see
+// exactly what each API is returning without deploying changes.
+app.get('/api/debug-realtime', async (req, res) => {
+  const offset = israelOffset();
+
+  const rawHistory = await new Promise((resolve) => {
+    const options = {
+      hostname: 'alerts-history.oref.org.il',
+      path: '/Shared/Ajax/GetAlarmsHistory.aspx?lang=he&mode=1',
+      headers: { 'Referer': 'https://alerts-history.oref.org.il/', 'X-Requested-With': 'XMLHttpRequest', 'Accept-Encoding': 'identity' }
+    };
+    https.get(options, (r) => {
+      let d = '';
+      r.on('data', c => d += c);
+      r.on('end', () => {
+        try {
+          const arr = JSON.parse(d);
+          const sorted = [...arr].sort((a, b) => b.rid - a.rid);
+          resolve({ count: arr.length, newest5: sorted.slice(0, 5), httpStatus: r.statusCode });
+        } catch { resolve({ error: 'parse failed', raw: d.slice(0, 200), httpStatus: r.statusCode }); }
+      });
+    }).on('error', e => resolve({ error: e.message }));
+  });
+
+  const rawDirect = await new Promise((resolve) => {
+    const options = {
+      hostname: 'www.oref.org.il',
+      path: '/WarningMessages/alert/alerts.json',
+      headers: { 'Referer': 'https://www.oref.org.il/', 'X-Requested-With': 'XMLHttpRequest', 'Accept-Encoding': 'identity', 'User-Agent': 'Mozilla/5.0' }
+    };
+    https.get(options, (r) => {
+      let d = '';
+      r.on('data', c => d += c);
+      r.on('end', () => resolve({ httpStatus: r.statusCode, raw: d.slice(0, 500) }));
+    }).on('error', e => resolve({ error: e.message }));
+  });
+
+  const rawTzevaadom = await new Promise((resolve) => {
+    const options = { hostname: 'api.tzevaadom.co.il', path: '/alerts', headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } };
+    https.get(options, (r) => {
+      let d = '';
+      r.on('data', c => d += c);
+      r.on('end', () => resolve({ httpStatus: r.statusCode, raw: d.slice(0, 500) }));
+    }).on('error', e => resolve({ error: e.message }));
+  });
+
+  res.json({
+    serverTime: new Date().toISOString(),
+    israelOffset: offset,
+    direct: rawDirect,
+    tzevaadom: rawTzevaadom,
+    history: rawHistory,
+  });
 });
 
 // ── City/polygon data (community data, cached in memory) ──────────────────────
