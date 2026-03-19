@@ -191,8 +191,10 @@
     </p>
     <p>לאחר הפריסה, הדבק כאן את כתובת ה-Worker:</p>
     <input id="cf-url-input" type="url" placeholder="https://oref-proxy.YOUR-NAME.workers.dev" />
+    <div id="test-result" style="display:none;font-size:11px;padding:7px 10px;border-radius:6px;margin-bottom:10px;direction:ltr;word-break:break-all;"></div>
     <div class="settings-btns">
       <button id="clear-btn">נקה</button>
+      <button id="test-btn" style="background:#1a3a2a;color:#44cc88;">בדוק ✓</button>
       <button id="cancel-btn">ביטול</button>
       <button id="save-btn">שמור</button>
     </div>
@@ -514,6 +516,7 @@
 
   document.getElementById('settings-btn').addEventListener('click', () => {
     urlInput.value = cfWorkerUrl || '';
+    document.getElementById('test-result').style.display = 'none';
     dialog.classList.add('open');
   });
   document.getElementById('cancel-btn').addEventListener('click', () => {
@@ -528,6 +531,35 @@
     dialog.classList.remove('open');
     poll(); // immediate re-poll with new URL
   });
+  document.getElementById('test-btn').addEventListener('click', async () => {
+    const testUrl = urlInput.value.trim();
+    const resultEl = document.getElementById('test-result');
+    if (!testUrl) {
+      resultEl.style.cssText = 'display:block;font-size:11px;padding:7px 10px;border-radius:6px;margin-bottom:10px;direction:ltr;word-break:break-all;background:#2a2010;color:#ffcc44;';
+      resultEl.textContent = '⚠ הכנס כתובת Worker תחילה';
+      return;
+    }
+    resultEl.style.cssText = 'display:block;font-size:11px;padding:7px 10px;border-radius:6px;margin-bottom:10px;direction:ltr;word-break:break-all;background:#1e2130;color:#888;';
+    resultEl.textContent = '⏳ בודק…';
+    try {
+      const t0 = Date.now();
+      const r = await fetch(testUrl, { cache: 'no-store' });
+      const ms = Date.now() - t0;
+      const body = await r.json();
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const hasAlert = body.alert && body.alert.data && body.alert.data.length > 0;
+      resultEl.style.cssText = 'display:block;font-size:11px;padding:7px 10px;border-radius:6px;margin-bottom:10px;direction:ltr;word-break:break-all;background:#0e2a1a;color:#44cc88;';
+      if (hasAlert) {
+        resultEl.textContent = `✓ Worker עובד! (${ms}ms) — יש התרעה פעילה: ${body.alert.data.slice(0,3).join(', ')}…`;
+      } else {
+        resultEl.textContent = `✓ Worker עובד! (${ms}ms) — אין התרעות פעילות כרגע`;
+      }
+    } catch (e) {
+      resultEl.style.cssText = 'display:block;font-size:11px;padding:7px 10px;border-radius:6px;margin-bottom:10px;direction:ltr;word-break:break-all;background:#2a1010;color:#ff6666;';
+      resultEl.textContent = '✗ שגיאה: ' + e.message;
+    }
+  });
+
   document.getElementById('clear-btn').addEventListener('click', () => {
     cfWorkerUrl = null;
     localStorage.removeItem(CF_KEY);
