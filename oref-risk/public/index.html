@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Israel Alert Risk Analyzer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2a2d3a;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header .logo { font-size: 24px; }
+    header h1 { font-size: 18px; font-weight: 600; color: #fff; }
+    header p { font-size: 12px; color: #888; margin-top: 2px; }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+
+    .search-card {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .search-card h2 { font-size: 14px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+
+    .search-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .search-row input, .search-row select {
+      background: #0f1117;
+      border: 1px solid #3a3d4a;
+      border-radius: 8px;
+      color: #e0e0e0;
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-row input { flex: 1; min-width: 200px; }
+    .search-row input:focus, .search-row select:focus { border-color: #e63946; }
+
+    .search-row select { cursor: pointer; }
+
+    .btn {
+      background: #e63946;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: #c1121f; }
+    .btn:disabled { background: #444; cursor: not-allowed; }
+
+    #autocomplete-list {
+      position: absolute;
+      background: #1e2130;
+      border: 1px solid #3a3d4a;
+      border-radius: 8px;
+      margin-top: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 100;
+      min-width: 240px;
+    }
+    #autocomplete-list div {
+      padding: 9px 14px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #autocomplete-list div:hover { background: #2a2d3a; }
+
+    .autocomplete-wrap { position: relative; flex: 1; min-width: 200px; }
+
+    #status {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #888;
+      min-height: 18px;
+    }
+
+    .results { display: none; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .stat-card .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .stat-card .value { font-size: 32px; font-weight: 700; color: #fff; line-height: 1; }
+    .stat-card .sub { font-size: 12px; color: #888; margin-top: 4px; }
+
+    .risk-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 6px;
+    }
+    .risk-none { background: #1a3a1a; color: #4ade80; }
+    .risk-low { background: #3a3a1a; color: #facc15; }
+    .risk-medium { background: #3a2a1a; color: #fb923c; }
+    .risk-high { background: #3a1a1a; color: #f87171; }
+    .risk-extreme { background: #5a0000; color: #ff3333; }
+
+    .section {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .section h3 { font-size: 14px; color: #aaa; margin-bottom: 16px; }
+
+    .bar-chart { display: flex; flex-direction: column; gap: 8px; }
+    .bar-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+    .bar-row .bar-label { width: 160px; text-align: right; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+    .bar-row .bar-track { flex: 1; background: #0f1117; border-radius: 4px; height: 20px; }
+    .bar-row .bar-fill { height: 100%; border-radius: 4px; background: #e63946; display: flex; align-items: center; padding-left: 8px; font-size: 11px; color: #fff; min-width: 2px; transition: width 0.5s; }
+    .bar-row .bar-count { width: 40px; text-align: right; color: #888; font-size: 12px; flex-shrink: 0; }
+
+    .calendar-grid {
+      display: grid;
+      gap: 3px;
+    }
+
+    .calendar-cell {
+      width: 100%;
+      padding-bottom: 100%;
+      border-radius: 3px;
+      position: relative;
+      cursor: default;
+    }
+
+    .timeline { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+    .timeline-item { display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid #1e2130; font-size: 13px; }
+    .timeline-item .t-date { color: #888; min-width: 95px; }
+    .timeline-item .t-loc { color: #fff; font-weight: 500; }
+    .timeline-item .t-cat { color: #e63946; font-size: 11px; }
+
+    .heatmap-wrap { overflow-x: auto; }
+    .heatmap { display: flex; gap: 3px; }
+    .hm-col { display: flex; flex-direction: column; gap: 3px; }
+    .hm-cell {
+      width: 12px; height: 12px; border-radius: 2px;
+      background: #1e2130;
+    }
+    .hm-cell[data-count="0"] { background: #1e2130; }
+
+    .legend { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #888; margin-top: 8px; }
+    .legend-cell { width: 12px; height: 12px; border-radius: 2px; }
+
+    #no-results { display: none; text-align: center; padding: 40px; color: #888; }
+    #no-results .icon { font-size: 48px; margin-bottom: 12px; }
+    #no-results p { font-size: 14px; }
+
+    /* Live alerts button */
+    #live-btn {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #1e2130;
+      border: 1px solid #3a3d4a;
+      border-radius: 8px;
+      color: #888;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+    #live-btn:hover { border-color: #e63946; color: #e63946; }
+    #live-btn.active {
+      background: #3a0a0a;
+      border-color: #e63946;
+      color: #ff4444;
+    }
+    #live-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #555;
+      flex-shrink: 0;
+    }
+    #live-btn.active #live-dot {
+      background: #ff4444;
+      animation: pulse-dot 1s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.6); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">🚨</span>
+  <div>
+    <h1>Israel Alert Risk Analyzer</h1>
+    <p>Based on IDF Home Front Command (פיקוד העורף) historical alert data</p>
+  </div>
+  <button id="live-btn" onclick="openAlertMap()" title="Live alert map">
+    <span id="live-dot"></span>
+    <span id="live-label">Live Map</span>
+  </button>
+</header>
+
+<div class="container">
+  <div class="search-card">
+    <h2>Search Location</h2>
+    <div class="search-row">
+      <div class="autocomplete-wrap">
+        <input type="text" id="location-input" placeholder="Type a location in Hebrew (e.g. תל אביב)" autocomplete="off" />
+        <div id="autocomplete-list" style="display:none;"></div>
+      </div>
+      <select id="mode-select">
+        <option value="1">Last 24 hours</option>
+        <option value="2">Last 7 days</option>
+        <option value="4" selected>This month</option>
+        <option value="3">Last 30 days</option>
+      </select>
+      <button class="btn" id="search-btn" onclick="runSearch()">Analyze</button>
+    </div>
+    <div id="status">Enter a location to get started, or leave blank for all of Israel</div>
+  </div>
+
+  <div id="no-results">
+    <div class="icon">📍</div>
+    <p>No alerts found for this location in the selected period.</p>
+  </div>
+
+  <div class="results" id="results">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">Total Alerts</div>
+        <div class="value" id="stat-total">—</div>
+        <div class="sub" id="stat-period">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Avg per Day</div>
+        <div class="value" id="stat-per-day">—</div>
+        <div class="sub">alerts / day</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Days with Alerts</div>
+        <div class="value" id="stat-days-pct">—</div>
+        <div class="sub" id="stat-days-sub">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Risk Level</div>
+        <div class="value" id="stat-risk-value" style="font-size:20px; margin-top:4px;">—</div>
+        <div id="stat-risk-badge"></div>
+      </div>
+    </div>
+
+    <div class="section" id="heatmap-section">
+      <h3>Alert Activity Heatmap (by week)</h3>
+      <div class="heatmap-wrap">
+        <div class="heatmap" id="heatmap"></div>
+      </div>
+      <div class="legend">
+        Less
+        <div class="legend-cell" style="background:#1e2130"></div>
+        <div class="legend-cell" style="background:#7f1d1d"></div>
+        <div class="legend-cell" style="background:#b91c1c"></div>
+        <div class="legend-cell" style="background:#dc2626"></div>
+        <div class="legend-cell" style="background:#ef4444"></div>
+        More
+      </div>
+    </div>
+
+    <div class="section" id="top-locations-section">
+      <h3>Top Locations by Alert Count</h3>
+      <div class="bar-chart" id="top-locations"></div>
+    </div>
+
+    <div class="section">
+      <h3>Recent Alerts</h3>
+      <div class="timeline" id="timeline"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let allLocations = [];
+  let currentData = null;
+
+  // Load locations for autocomplete
+  async function loadLocations() {
+    try {
+      const r = await fetch('/api/locations');
+      const data = await r.json();
+      allLocations = data.locations || [];
+    } catch (e) { console.error(e); }
+  }
+  loadLocations();
+
+  // Autocomplete
+  const locationInput = document.getElementById('location-input');
+  const autocompleteList = document.getElementById('autocomplete-list');
+
+  locationInput.addEventListener('input', () => {
+    const val = locationInput.value.trim();
+    if (!val || val.length < 1) { autocompleteList.style.display = 'none'; return; }
+    const matches = allLocations.filter(l => l.includes(val)).slice(0, 10);
+    if (!matches.length) { autocompleteList.style.display = 'none'; return; }
+    autocompleteList.innerHTML = matches.map(m =>
+      `<div onclick="selectLocation('${m.replace(/'/g, "\\'")}')">${m}</div>`
+    ).join('');
+    autocompleteList.style.display = 'block';
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.autocomplete-wrap')) autocompleteList.style.display = 'none';
+  });
+
+  function selectLocation(name) {
+    locationInput.value = name;
+    autocompleteList.style.display = 'none';
+  }
+
+  async function runSearch() {
+    const location = locationInput.value.trim();
+    const mode = document.getElementById('mode-select').value;
+    const btn = document.getElementById('search-btn');
+    const status = document.getElementById('status');
+
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    status.textContent = 'Fetching alerts…';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('no-results').style.display = 'none';
+
+    try {
+      const params = new URLSearchParams({ mode });
+      if (location) params.set('location', location);
+
+      const r = await fetch(`/api/history?${params}`);
+      const data = await r.json();
+
+      if (data.error) throw new Error(data.error);
+      currentData = data;
+      renderResults(data, location);
+    } catch (e) {
+      status.textContent = `Error: ${e.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Analyze';
+    }
+  }
+
+  function renderResults(data, location) {
+    const status = document.getElementById('status');
+    const alerts = data.alerts;
+    const totalDays = data.periodDays;
+
+    if (!alerts.length) {
+      status.textContent = location
+        ? `No alerts found for "${location}" in the last ${data.period}`
+        : `No alerts found in the last ${data.period}`;
+      document.getElementById('no-results').style.display = 'block';
+      return;
+    }
+
+    const capNote = data.cappedAt3000 ? ' (capped at 3,000 — filter by city for full data)' : '';
+    status.textContent = `Found ${alerts.length.toLocaleString()} alerts${location ? ` for "${location}"` : ' across Israel'} in the last ${data.period}${capNote}`;
+    const perDay = (alerts.length / totalDays).toFixed(2);
+
+    const alertsByDate = {};
+    alerts.forEach(a => {
+      const d = a.alertDate.substring(0, 10);
+      alertsByDate[d] = (alertsByDate[d] || 0) + 1;
+    });
+    const daysWithAlerts = Object.keys(alertsByDate).length;
+    const daysPct = Math.round((daysWithAlerts / totalDays) * 100);
+
+    document.getElementById('stat-total').textContent = alerts.length.toLocaleString();
+    document.getElementById('stat-period').textContent = `last ${data.period}`;
+    document.getElementById('stat-per-day').textContent = perDay;
+    document.getElementById('stat-days-pct').textContent = daysPct + '%';
+    document.getElementById('stat-days-sub').textContent = `${daysWithAlerts} of ${totalDays} days`;
+
+    // Risk level
+    let riskLabel, riskClass;
+    if (daysPct === 0) { riskLabel = 'None'; riskClass = 'risk-none'; }
+    else if (daysPct < 5) { riskLabel = 'Low'; riskClass = 'risk-low'; }
+    else if (daysPct < 20) { riskLabel = 'Medium'; riskClass = 'risk-medium'; }
+    else if (daysPct < 50) { riskLabel = 'High'; riskClass = 'risk-high'; }
+    else { riskLabel = 'Extreme'; riskClass = 'risk-extreme'; }
+
+    document.getElementById('stat-risk-value').textContent = riskLabel;
+    document.getElementById('stat-risk-badge').innerHTML =
+      `<span class="risk-badge ${riskClass}">${daysPct}% of days</span>`;
+
+    // --- Heatmap ---
+    renderHeatmap(alertsByDate, totalDays);
+
+    // --- Top Locations (only if no specific location filter) ---
+    const topLocSection = document.getElementById('top-locations-section');
+    if (location) {
+      topLocSection.style.display = 'none';
+    } else {
+      topLocSection.style.display = 'block';
+      const locCounts = {};
+      alerts.forEach(a => { locCounts[a.data] = (locCounts[a.data] || 0) + 1; });
+      const sorted = Object.entries(locCounts).sort((a, b) => b[1] - a[1]).slice(0, 15);
+      const max = sorted[0][1];
+      document.getElementById('top-locations').innerHTML = sorted.map(([loc, cnt]) => `
+        <div class="bar-row">
+          <div class="bar-label" title="${loc}">${loc}</div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${(cnt/max*100).toFixed(1)}%">${cnt > 3 ? cnt : ''}</div>
+          </div>
+          <div class="bar-count">${cnt}</div>
+        </div>
+      `).join('');
+    }
+
+    // --- Timeline ---
+    const recent = [...alerts].sort((a, b) => b.rid - a.rid).slice(0, 50);
+    document.getElementById('timeline').innerHTML = recent.map(a => `
+      <div class="timeline-item">
+        <div class="t-date">${formatDate(a.alertDate)}</div>
+        <div>
+          <div class="t-loc">${a.data}</div>
+          <div class="t-cat">${a.category === 1 ? '🚀 Rockets/Missiles' : '✈️ UAV/Drone'}</div>
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('results').style.display = 'block';
+  }
+
+  function renderHeatmap(alertsByDate, totalDays) {
+    const heatmap = document.getElementById('heatmap');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Go back to start of the week (Sunday) of the start date
+    const start = new Date(today);
+    start.setDate(start.getDate() - totalDays);
+    // Align to Sunday
+    start.setDate(start.getDate() - start.getDay());
+
+    const weeks = [];
+    let cur = new Date(start);
+
+    while (cur <= today) {
+      const week = [];
+      for (let d = 0; d < 7; d++) {
+        const dateStr = cur.toISOString().substring(0, 10);
+        week.push({ date: dateStr, count: alertsByDate[dateStr] || 0 });
+        cur.setDate(cur.getDate() + 1);
+      }
+      weeks.push(week);
+    }
+
+    // Find max for color scaling
+    const maxCount = Math.max(...Object.values(alertsByDate), 1);
+
+    heatmap.innerHTML = weeks.map(week => `
+      <div class="hm-col">
+        ${week.map(day => {
+          const intensity = day.count === 0 ? 0 : Math.ceil((day.count / maxCount) * 4);
+          const colors = ['#1e2130', '#7f1d1d', '#b91c1c', '#dc2626', '#ef4444'];
+          const title = `${day.date}: ${day.count} alert${day.count !== 1 ? 's' : ''}`;
+          return `<div class="hm-cell" style="background:${colors[intensity]}" title="${title}"></div>`;
+        }).join('')}
+      </div>
+    `).join('');
+  }
+
+  function formatDate(isoStr) {
+    const d = new Date(isoStr);
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ── Live alerts polling ────────────────────────────────────────────────────
+  let alertMapWin = null;
+
+  function openAlertMap() {
+    if (alertMapWin && !alertMapWin.closed) {
+      alertMapWin.focus();
+    } else {
+      alertMapWin = window.open('/alert-map.html', 'alert-map',
+        'width=900,height=700,resizable=yes');
+    }
+  }
+
+  async function pollRealtimeAlert() {
+    try {
+      const r = await fetch('/api/realtime');
+      const { alert } = await r.json();
+      const btn = document.getElementById('live-btn');
+      const label = document.getElementById('live-label');
+      if (alert && alert.cat !== '10' && alert.data && alert.data.length > 0) {
+        btn.classList.add('active');
+        label.textContent = `התרעה! (${alert.data.length})`;
+      } else {
+        btn.classList.remove('active');
+        label.textContent = 'Live Map';
+      }
+    } catch { /* ignore */ }
+  }
+
+  pollRealtimeAlert();
+  setInterval(pollRealtimeAlert, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>מפת התרעות בזמן אמת – פיקוד העורף</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2a2d3a;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    header h1 { font-size: 15px; font-weight: 600; color: #fff; }
+
+    #mode-badge {
+      margin-right: auto;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: #2a2d3a;
+      color: #888;
+      letter-spacing: 0.04em;
+    }
+    #mode-badge.hatara { background: #3a1a00; color: #ff9944; }
+    #mode-badge.azaka  { background: #3a0000; color: #ff4444; animation: flash-badge 0.8s ease-in-out infinite; }
+    @keyframes flash-badge {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.55; }
+    }
+
+    #status-bar {
+      padding: 8px 16px;
+      font-size: 13px;
+      background: #0f1117;
+      border-bottom: 1px solid #1e2130;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #alert-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #555;
+      flex-shrink: 0;
+    }
+    #alert-dot.active {
+      background: #ff4444;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    #alert-dot.ended { background: #ff8800; }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,68,68,0.7); }
+      50%       { box-shadow: 0 0 0 6px rgba(255,68,68,0); }
+    }
+
+    #status-text { color: #aaa; }
+    #status-text.active { color: #ff6666; font-weight: 600; }
+
+    #cities-list {
+      margin-right: 8px;
+      font-size: 12px;
+      color: #ffa0a0;
+      direction: rtl;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #map { flex: 1; }
+
+    #legend {
+      position: absolute;
+      bottom: 24px;
+      left: 12px;
+      background: rgba(26,29,39,0.92);
+      border: 1px solid #2a2d3a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      z-index: 1000;
+      direction: rtl;
+    }
+    #legend .leg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    #legend .leg-row:last-child { margin-bottom: 0; }
+    .leg-box { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+    .leg-dot-sample {
+      display: flex; gap: 3px; align-items: center;
+    }
+    .leg-dot-sample span {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #ff4444; display: inline-block;
+    }
+
+    #last-updated {
+      position: absolute;
+      bottom: 6px;
+      right: 10px;
+      font-size: 10px;
+      color: #555;
+      z-index: 1000;
+      direction: ltr;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:20px">🚨</span>
+  <h1>מפת התרעות בזמן אמת – פיקוד העורף</h1>
+  <div id="mode-badge">ממתין…</div>
+</header>
+
+<div id="status-bar">
+  <div id="alert-dot"></div>
+  <div id="status-text">טוען נתונים…</div>
+  <div id="cities-list"></div>
+</div>
+
+<div id="map"></div>
+
+<div id="legend">
+  <div class="leg-row">
+    <div class="leg-box" style="background:#ff8844;opacity:0.6"></div>
+    התרעה – פוליגון אזור
+  </div>
+  <div class="leg-row">
+    <div class="leg-dot-sample"><span></span><span></span><span></span></div>
+    אזעקה – נקודות בתוך האזור
+  </div>
+  <div class="leg-row">
+    <div class="leg-box" style="background:#ff8800;opacity:0.5"></div>
+    האירוע הסתיים
+  </div>
+</div>
+<div id="last-updated"></div>
+
+<script>
+  // ── Map setup ──────────────────────────────────────────────────────────────
+  const map = L.map('map', {
+    center: [31.5, 34.9],
+    zoom: 7,
+    zoomControl: true,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19
+  }).addTo(map);
+
+  // ── Geodata ────────────────────────────────────────────────────────────────
+  let citiesByName = {};
+  let polygonsData = {};
+  let dataReady = false;
+
+  async function loadGeoData() {
+    try {
+      const [citiesRes, polygonsRes] = await Promise.all([
+        fetch('/api/cities-geo'),
+        fetch('/api/polygon-data'),
+      ]);
+      const cities = await citiesRes.json();
+      polygonsData = await polygonsRes.json();
+      cities.forEach(c => {
+        if (c.id && c.name) citiesByName[c.name] = c;
+      });
+      dataReady = true;
+    } catch (e) {
+      console.error('Failed to load geo data', e);
+    }
+  }
+
+  // ── Geometry helpers ───────────────────────────────────────────────────────
+
+  // Ray-casting point-in-polygon (coords = [[lat,lng],…])
+  function pointInPolygon(lat, lng, coords) {
+    let inside = false;
+    for (let i = 0, j = coords.length - 1; i < coords.length; j = i++) {
+      const [yi, xi] = coords[i];
+      const [yj, xj] = coords[j];
+      if (((yi > lat) !== (yj > lat)) &&
+          (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  // Generate N random dots uniformly inside a polygon
+  function dotsInsidePolygon(coords, count) {
+    const lats = coords.map(p => p[0]);
+    const lngs = coords.map(p => p[1]);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+
+    const points = [];
+    let tries = 0;
+    while (points.length < count && tries < count * 15) {
+      tries++;
+      const lat = minLat + Math.random() * (maxLat - minLat);
+      const lng = minLng + Math.random() * (maxLng - minLng);
+      if (pointInPolygon(lat, lng, coords)) points.push([lat, lng]);
+    }
+    return points;
+  }
+
+  // Dot count scales with polygon area (in degree² units)
+  function dotCount(coords) {
+    const lats = coords.map(p => p[0]);
+    const lngs = coords.map(p => p[1]);
+    const area = (Math.max(...lats) - Math.min(...lats)) *
+                 (Math.max(...lngs) - Math.min(...lngs));
+    return Math.max(6, Math.min(40, Math.round(area * 18000)));
+  }
+
+  // ── Alert rendering ────────────────────────────────────────────────────────
+  let activeLayerGroup = L.featureGroup().addTo(map);
+  let prevAlertId = null;
+
+  const ALERT_COLOR  = '#ff4444';
+  const WARN_COLOR   = '#ff8844';
+  const ENDED_COLOR  = '#ff8800';
+
+  // Detect alert type from title:
+  // titles starting with "התרעה" → pre-alarm (filled polygon)
+  // everything else              → actual siren (dots)
+  function isHatara(alert) {
+    return alert.title && alert.title.startsWith('התרעה');
+  }
+
+  function drawForAlert(alert) {
+    activeLayerGroup.clearLayers();
+
+    const ended  = alert.cat === '10';
+    const hatara = !ended && isHatara(alert);
+    const cityNames = alert.data || [];
+
+    cityNames.forEach(name => {
+      const city = citiesByName[name];
+      if (!city) return;
+
+      const coords = polygonsData[String(city.id)];
+
+      if (ended) {
+        // Always show polygon outline in orange
+        const layer = coords && coords.length >= 3
+          ? L.polygon(coords, { color: ENDED_COLOR, fillColor: ENDED_COLOR, fillOpacity: 0.25, weight: 1.5, opacity: 0.7 })
+          : L.circle([city.lat, city.lng], { radius: 2500, color: ENDED_COLOR, fillColor: ENDED_COLOR, fillOpacity: 0.25, weight: 1.5 });
+        layer.bindTooltip(name);
+        activeLayerGroup.addLayer(layer);
+
+      } else if (hatara) {
+        // התרעה → filled polygon
+        if (coords && coords.length >= 3) {
+          const poly = L.polygon(coords, {
+            color: WARN_COLOR, fillColor: WARN_COLOR,
+            fillOpacity: 0.45, weight: 2, opacity: 0.9,
+          });
+          poly.bindTooltip(name, { direction: 'center' });
+          activeLayerGroup.addLayer(poly);
+        } else if (city.lat && city.lng) {
+          activeLayerGroup.addLayer(
+            L.circle([city.lat, city.lng], {
+              radius: 3000, color: WARN_COLOR, fillColor: WARN_COLOR, fillOpacity: 0.45, weight: 2,
+            }).bindTooltip(name)
+          );
+        }
+
+      } else {
+        // אזעקה → polygon outline + scattered dots inside
+        if (coords && coords.length >= 3) {
+          // Faint outline
+          activeLayerGroup.addLayer(
+            L.polygon(coords, {
+              color: ALERT_COLOR, fillColor: ALERT_COLOR,
+              fillOpacity: 0.08, weight: 1.5, opacity: 0.6,
+            })
+          );
+          // Dots
+          const n = dotCount(coords);
+          dotsInsidePolygon(coords, n).forEach(([lat, lng]) => {
+            activeLayerGroup.addLayer(
+              L.circleMarker([lat, lng], {
+                radius: 4,
+                color: '#cc0000',
+                fillColor: ALERT_COLOR,
+                fillOpacity: 0.9,
+                weight: 1,
+              })
+            );
+          });
+          // City label tooltip on the outline
+          const center = L.polygon(coords).getBounds().getCenter();
+          activeLayerGroup.addLayer(
+            L.marker(center, { opacity: 0 })
+              .bindTooltip(name, { permanent: false, direction: 'center' })
+          );
+        } else if (city.lat && city.lng) {
+          // Fallback: cluster of dots around city center
+          for (let i = 0; i < 12; i++) {
+            const dlat = (Math.random() - 0.5) * 0.04;
+            const dlng = (Math.random() - 0.5) * 0.04;
+            activeLayerGroup.addLayer(
+              L.circleMarker([city.lat + dlat, city.lng + dlng], {
+                radius: 4, color: '#cc0000', fillColor: ALERT_COLOR, fillOpacity: 0.9, weight: 1,
+              })
+            );
+          }
+        }
+      }
+    });
+
+    // Zoom to fit
+    const bounds = activeLayerGroup.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds.pad(0.25));
+  }
+
+  // ── UI update ──────────────────────────────────────────────────────────────
+  const CAT_LABELS = {
+    '1': 'ירי רקטות וטילים', '2': 'טילים בלתי-קונבנציונליים',
+    '3': 'רעידת אדמה', '4': 'אירוע רדיואקטיבי', '5': 'צונאמי',
+    '6': 'כלי טיס עוין', '7': 'חומרים מסוכנים', '13': 'חדירת מחבלים',
+    '10': 'האירוע הסתיים',
+  };
+
+  function updateUI(alert) {
+    const dot    = document.getElementById('alert-dot');
+    const text   = document.getElementById('status-text');
+    const cities = document.getElementById('cities-list');
+    const badge  = document.getElementById('mode-badge');
+
+    if (!alert || !alert.data || alert.data.length === 0) {
+      dot.className    = '';
+      text.className   = '';
+      text.textContent = 'אין התרעות פעילות כרגע';
+      cities.textContent = '';
+      badge.className  = '';
+      badge.textContent = 'שקט';
+      activeLayerGroup.clearLayers();
+      prevAlertId = null;
+      return;
+    }
+
+    const ended  = alert.cat === '10';
+    const hatara = !ended && isHatara(alert);
+    const label  = CAT_LABELS[alert.cat] || alert.title || 'התרעה';
+
+    dot.className    = ended ? 'ended' : 'active';
+    text.className   = ended ? '' : 'active';
+    text.textContent = label;
+    cities.textContent = alert.data.join(' | ');
+
+    if (ended) {
+      badge.className  = '';
+      badge.textContent = 'האירוע הסתיים';
+    } else if (hatara) {
+      badge.className  = 'hatara';
+      badge.textContent = '⚠ התרעה';
+    } else {
+      badge.className  = 'azaka';
+      badge.textContent = '🔴 אזעקה';
+    }
+
+    if (alert.id !== prevAlertId && dataReady) {
+      prevAlertId = alert.id;
+      drawForAlert(alert);
+    }
+  }
+
+  // ── Polling ────────────────────────────────────────────────────────────────
+  async function poll() {
+    try {
+      const r = await fetch('/api/realtime');
+      const { alert } = await r.json();
+      updateUI(alert);
+      document.getElementById('last-updated').textContent =
+        'עודכן: ' + new Date().toLocaleTimeString('he-IL');
+    } catch {
+      document.getElementById('status-text').textContent = 'שגיאת חיבור לשרת';
+    }
+  }
+
+  loadGeoData().then(() => {
+    poll();
+    setInterval(poll, 2000);
+  });
+</script>
+</body>
+</html>
