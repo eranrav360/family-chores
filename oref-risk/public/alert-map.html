@@ -123,6 +123,50 @@
       z-index: 1000;
       direction: ltr;
     }
+
+    #settings-btn {
+      background: none; border: none; cursor: pointer;
+      color: #555; font-size: 17px; padding: 2px 6px;
+      line-height: 1; border-radius: 4px;
+    }
+    #settings-btn:hover { color: #aaa; background: #1e2130; }
+
+    #settings-dialog {
+      display: none;
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,0.6);
+      align-items: center; justify-content: center;
+    }
+    #settings-dialog.open { display: flex; }
+    #settings-box {
+      background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 10px;
+      padding: 22px 24px; width: min(380px, 92vw); direction: rtl;
+    }
+    #settings-box h2 { font-size: 14px; margin-bottom: 14px; color: #ddd; }
+    #settings-box p  { font-size: 12px; color: #888; line-height: 1.55; margin-bottom: 14px; }
+    #settings-box a  { color: #4a9eff; }
+    #cf-url-input {
+      width: 100%; padding: 8px 10px; border-radius: 6px;
+      border: 1px solid #3a3d4a; background: #0f1117; color: #ddd;
+      font-size: 13px; direction: ltr; margin-bottom: 12px;
+    }
+    .settings-btns { display: flex; gap: 8px; justify-content: flex-end; }
+    .settings-btns button {
+      padding: 7px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px;
+    }
+    #save-btn   { background: #2255cc; color: #fff; }
+    #save-btn:hover { background: #3366dd; }
+    #clear-btn  { background: #3a2020; color: #ff8888; }
+    #clear-btn:hover { background: #4a2020; }
+    #cancel-btn { background: #2a2d3a; color: #aaa; }
+    #cancel-btn:hover { background: #3a3d4a; }
+
+    #proxy-indicator {
+      font-size: 10px; padding: 2px 7px; border-radius: 10px;
+      background: #1e2130; color: #555;
+    }
+    #proxy-indicator.cf  { background: #0e2a1a; color: #44cc88; }
+    #proxy-indicator.err { background: #2a1010; color: #ff6666; }
   </style>
 </head>
 <body>
@@ -130,8 +174,30 @@
 <header>
   <span style="font-size:20px">🚨</span>
   <h1>מפת התרעות בזמן אמת – פיקוד העורף</h1>
+  <div id="proxy-indicator" title="מקור נתונים">⬤ Vercel</div>
   <div id="mode-badge">ממתין…</div>
+  <button id="settings-btn" title="הגדרות">⚙</button>
 </header>
+
+<!-- Settings dialog -->
+<div id="settings-dialog">
+  <div id="settings-box">
+    <h2>⚙ הגדרת Cloudflare Worker</h2>
+    <p>
+      שרתי הענן חסומים על-ידי פיקוד העורף (403). הפתרון: פרוס
+      <a href="https://dash.cloudflare.com" target="_blank">Cloudflare Worker</a>
+      חינמי מהקובץ <code>oref-cf-worker.js</code> שבפרויקט —
+      הוא רץ מ-PoP ת&quot;א של Cloudflare (IP ישראלי) ומגיע לאורף ישירות.
+    </p>
+    <p>לאחר הפריסה, הדבק כאן את כתובת ה-Worker:</p>
+    <input id="cf-url-input" type="url" placeholder="https://oref-proxy.YOUR-NAME.workers.dev" />
+    <div class="settings-btns">
+      <button id="clear-btn">נקה</button>
+      <button id="cancel-btn">ביטול</button>
+      <button id="save-btn">שמור</button>
+    </div>
+  </div>
+</div>
 
 <div id="status-bar">
   <div id="alert-dot"></div>
@@ -390,22 +456,90 @@
     }
   }
 
+  // ── CF Worker URL (stored in localStorage, configurable via ⚙ button) ──────
+  const CF_KEY = 'orefCfWorkerUrl';
+  let cfWorkerUrl = localStorage.getItem(CF_KEY) || null;
+
+  // Allow setting via URL param once: /alert-map.html?worker=https://...
+  (() => {
+    const p = new URLSearchParams(location.search).get('worker');
+    if (p) { cfWorkerUrl = p; localStorage.setItem(CF_KEY, p); }
+  })();
+
+  function updateProxyIndicator(source) {
+    const el = document.getElementById('proxy-indicator');
+    if (source === 'cf') {
+      el.className = 'cf'; el.textContent = '⬤ CF Worker';
+    } else if (source === 'err') {
+      el.className = 'err'; el.textContent = '⬤ שגיאה';
+    } else {
+      el.className = ''; el.textContent = '⬤ Vercel';
+    }
+  }
+
   // ── Polling ────────────────────────────────────────────────────────────────
+  async function fetchAlertData() {
+    if (cfWorkerUrl) {
+      try {
+        const r = await fetch(cfWorkerUrl, { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        updateProxyIndicator('cf');
+        return d;
+      } catch (e) {
+        console.warn('[oref] CF Worker failed:', e.message, '— trying Vercel fallback');
+      }
+    }
+    // Fallback: Vercel server (history-API based, may lag a few minutes)
+    const r = await fetch('/api/realtime');
+    updateProxyIndicator('vercel');
+    return r.json();
+  }
+
   async function poll() {
     try {
-      const r = await fetch('/api/realtime');
-      const { alert } = await r.json();
+      const { alert } = await fetchAlertData();
       updateUI(alert);
       document.getElementById('last-updated').textContent =
         'עודכן: ' + new Date().toLocaleTimeString('he-IL');
     } catch {
       document.getElementById('status-text').textContent = 'שגיאת חיבור לשרת';
+      updateProxyIndicator('err');
     }
   }
 
+  // ── Settings dialog ────────────────────────────────────────────────────────
+  const dialog   = document.getElementById('settings-dialog');
+  const urlInput = document.getElementById('cf-url-input');
+
+  document.getElementById('settings-btn').addEventListener('click', () => {
+    urlInput.value = cfWorkerUrl || '';
+    dialog.classList.add('open');
+  });
+  document.getElementById('cancel-btn').addEventListener('click', () => {
+    dialog.classList.remove('open');
+  });
+  dialog.addEventListener('click', e => {
+    if (e.target === dialog) dialog.classList.remove('open');
+  });
+  document.getElementById('save-btn').addEventListener('click', () => {
+    const v = urlInput.value.trim();
+    if (v) { cfWorkerUrl = v; localStorage.setItem(CF_KEY, v); }
+    dialog.classList.remove('open');
+    poll(); // immediate re-poll with new URL
+  });
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    cfWorkerUrl = null;
+    localStorage.removeItem(CF_KEY);
+    urlInput.value = '';
+    dialog.classList.remove('open');
+    updateProxyIndicator('vercel');
+  });
+
+  // ── Start ──────────────────────────────────────────────────────────────────
   loadGeoData().then(() => {
     poll();
-    setInterval(poll, 2000);
+    setInterval(poll, 15000);
   });
 </script>
 </body>
