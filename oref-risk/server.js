@@ -270,4 +270,17 @@ app.listen(PORT, () => {
   console.log(`oref-risk server running at http://localhost:${PORT}`);
   // Pre-fetch polygon data on startup
   ensureCityPolygonData().catch(() => {});
+
+  // Keep Render free instance alive (it spins down after inactivity).
+  // Ping /api/realtime every 10 minutes so the server never goes cold.
+  if (process.env.RENDER_EXTERNAL_URL) {
+    const selfUrl = process.env.RENDER_EXTERNAL_URL;
+    setInterval(() => {
+      https.get(`${selfUrl}/api/realtime`, (r) => {
+        console.log(`[keep-alive] pinged self → HTTP ${r.statusCode}`);
+        r.resume();
+      }).on('error', (e) => console.warn('[keep-alive] ping error:', e.message));
+    }, 10 * 60 * 1000); // every 10 minutes
+    console.log(`[keep-alive] scheduled self-ping every 10 min → ${selfUrl}`);
+  }
 });
