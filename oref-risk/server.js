@@ -122,7 +122,8 @@ app.get('/api/locations', async (req, res) => {
 
 // ── Real-time alerts ──────────────────────────────────────────────────────────
 
-function fetchRealtimeAlerts() {
+// Primary: try www.oref.org.il (works locally / Israeli IPs)
+function fetchOrefDirect() {
   return new Promise((resolve) => {
     const options = {
       hostname: 'www.oref.org.il',
@@ -144,6 +145,67 @@ function fetchRealtimeAlerts() {
       });
     }).on('error', () => resolve(null));
   });
+}
+
+// Fallback: derive "live" alerts from history API (not geo-blocked).
+// Fetches last 24h, returns alerts from the last 15 min as a pseudo-live feed.
+function fetchRealtimeFromHistory() {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'alerts-history.oref.org.il',
+      path: '/Shared/Ajax/GetAlarmsHistory.aspx?lang=he&mode=1',
+      headers: {
+        'Referer': 'https://alerts-history.oref.org.il/',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept-Encoding': 'identity',
+      }
+    };
+    https.get(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const alerts = data.length > 2 ? JSON.parse(data) : [];
+          if (!alerts.length) { resolve(null); return; }
+
+          // Sort newest-first by rid (sequential ID)
+          const sorted = [...alerts].sort((a, b) => b.rid - a.rid);
+          const latest = sorted[0];
+
+          // alertDate is in Israeli time (UTC+2 winter / UTC+3 summer).
+          // Parse with +02:00 and allow a 15-min window (covers DST shift too).
+          const latestMs = new Date(latest.alertDate.replace(' ', 'T') + '+02:00').getTime();
+          const nowMs = Date.now();
+          const FIFTEEN_MIN = 15 * 60 * 1000;
+
+          if (nowMs - latestMs > FIFTEEN_MIN) { resolve(null); return; }
+
+          // Collect cities from the same burst (within 90 s of the latest alert)
+          const BURST = 90 * 1000;
+          const recent = sorted.filter(a => {
+            const t = new Date(a.alertDate.replace(' ', 'T') + '+02:00').getTime();
+            return (latestMs - t) <= BURST && (a.category === 1 || a.category === 6);
+          });
+          const cities = [...new Set(recent.map(a => a.data))];
+          if (!cities.length) { resolve(null); return; }
+
+          resolve({
+            id: `hist-${latest.rid}`,
+            cat: String(latest.category),
+            title: latest.category === 1 ? 'ירי רקטות וטילים' : 'כלי טיס עוין',
+            data: cities,
+            desc: '',
+          });
+        } catch { resolve(null); }
+      });
+    }).on('error', () => resolve(null));
+  });
+}
+
+async function fetchRealtimeAlerts() {
+  const direct = await fetchOrefDirect();
+  if (direct) return direct;
+  return fetchRealtimeFromHistory();
 }
 
 app.get('/api/realtime', async (req, res) => {
