@@ -422,6 +422,23 @@
     latestAlertId = null;
   }
 
+  // Remove only layers whose city list overlaps with the ended alert's cities
+  function clearAlertsForCities(endedCities) {
+    const endedSet = new Set(endedCities);
+    for (const [id, e] of azakaEntries) {
+      const overlaps = (e.alert.data || []).some(c => endedSet.has(c));
+      if (overlaps) {
+        if (e.colorTimer) clearTimeout(e.colorTimer);
+        e.layerGroup.remove();
+        azakaEntries.delete(id);
+      }
+    }
+    if (hataraEntry) {
+      const overlaps = (hataraEntry.alert.data || []).some(c => endedSet.has(c));
+      if (overlaps) { hataraEntry.layerGroup.remove(); hataraEntry = null; }
+    }
+  }
+
   // ── UI update ───────────────────────────────────────────────────────────────
   const CAT_LABELS = {
     '1': 'ירי רקטות וטילים', '2': 'טילים בלתי-קונבנציונליים',
@@ -473,9 +490,10 @@
 
     if (!dataReady) return;
 
-    // ── האירוע הסתיים → clear everything ──────────────────────────────────────
+    // ── האירוע הסתיים → clear only the cities in this alert ──────────────────
     if (ended) {
-      clearAllAlerts();
+      clearAlertsForCities(alert.data);
+      latestAlertId = alert.id;
       return;
     }
 
