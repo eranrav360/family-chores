@@ -2,8 +2,15 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>מפת התרעות בזמן אמת – פיקוד העורף</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="פיקוד העורף">
+  <meta name="theme-color" content="#1a1d27">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -277,8 +284,21 @@
     return inside;
   }
 
-  // Generate N random dots uniformly inside a polygon
-  function dotsInsidePolygon(coords, count) {
+  // Seeded LCG — returns a deterministic pseudo-random function for a string seed.
+  // Used so dots stay in the same positions across re-renders for the same alert.
+  function seededRand(str) {
+    let s = 0;
+    for (let i = 0; i < str.length; i++) s = Math.imul(31, s) + str.charCodeAt(i) | 0;
+    return function () {
+      s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+      return (s >>> 0) / 0xffffffff;
+    };
+  }
+
+  // Generate N random dots uniformly inside a polygon.
+  // Pass a seeded rand function for deterministic placement.
+  function dotsInsidePolygon(coords, count, rand) {
+    rand = rand || Math.random.bind(Math);
     const lats = coords.map(p => p[0]);
     const lngs = coords.map(p => p[1]);
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
@@ -288,8 +308,8 @@
     let tries = 0;
     while (points.length < count && tries < count * 15) {
       tries++;
-      const lat = minLat + Math.random() * (maxLat - minLat);
-      const lng = minLng + Math.random() * (maxLng - minLng);
+      const lat = minLat + rand() * (maxLat - minLat);
+      const lng = minLng + rand() * (maxLng - minLng);
       if (pointInPolygon(lat, lng, coords)) points.push([lat, lng]);
     }
     return points;
@@ -306,17 +326,26 @@
 
   // ── Alert rendering ────────────────────────────────────────────────────────
   let activeLayerGroup = L.featureGroup().addTo(map);
-  let prevAlertId = null;
+  let prevAlertId   = null;
+  let alertStartMs  = null; // when the current אזעקה was first detected
+  let currentAlert  = null; // latest alert object for timer callbacks
+  let colorTimer    = null; // setTimeout → redraws dots blue at 90 s
+  let clearTimer    = null; // setTimeout → clears dots at 9.5 min
 
-  const ALERT_COLOR  = '#ff4444';
+  const ALERT_COLOR  = '#ff4444'; // red  — 0–90 s
+  const BLUE_COLOR   = '#4488ff'; // blue — 90 s – 9.5 min
   const WARN_COLOR   = '#ff8844';
   const ENDED_COLOR  = '#ff8800';
 
-  // Detect alert type from title:
-  // titles starting with "התרעה" → pre-alarm (filled polygon)
-  // everything else              → actual siren (dots)
+  const DOT_RED_MS   =   90_000; // 1 min 30 s
+  const DOT_CLEAR_MS =  570_000; // 9 min 30 s
+
+  // Detect pre-alarm (התרעה) vs actual siren (אזעקה).
+  // Pre-alarm: title starts with "התרעה", OR desc mentions upcoming alerts.
   function isHatara(alert) {
-    return alert.title && alert.title.startsWith('התרעה');
+    if (alert.title && alert.title.startsWith('התרעה')) return true;
+    if (alert.desc && alert.desc.includes('בדקות הקרובות')) return true;
+    return false;
   }
 
   function drawForAlert(alert) {
@@ -359,28 +388,36 @@
 
       } else {
         // אזעקה → polygon outline + scattered dots inside
+        // Dot color: red for first 90 s, blue for next 8 min, then cleared.
+        const elapsed  = alertStartMs ? Date.now() - alertStartMs : 0;
+        if (elapsed >= DOT_CLEAR_MS) return; // already past clear time, skip city
+
+        const dotColor   = elapsed < DOT_RED_MS ? ALERT_COLOR : BLUE_COLOR;
+        const dotStroke  = elapsed < DOT_RED_MS ? '#cc0000'   : '#2255bb';
+        const rand = seededRand(name + (currentAlert ? currentAlert.id : ''));
+
         if (coords && coords.length >= 3) {
           // Faint outline
           activeLayerGroup.addLayer(
             L.polygon(coords, {
-              color: ALERT_COLOR, fillColor: ALERT_COLOR,
+              color: dotColor, fillColor: dotColor,
               fillOpacity: 0.08, weight: 1.5, opacity: 0.6,
             })
           );
-          // Dots
+          // Dots — deterministic positions via seededRand
           const n = dotCount(coords);
-          dotsInsidePolygon(coords, n).forEach(([lat, lng]) => {
+          dotsInsidePolygon(coords, n, rand).forEach(([lat, lng]) => {
             activeLayerGroup.addLayer(
               L.circleMarker([lat, lng], {
                 radius: 4,
-                color: '#cc0000',
-                fillColor: ALERT_COLOR,
+                color: dotStroke,
+                fillColor: dotColor,
                 fillOpacity: 0.9,
                 weight: 1,
               })
             );
           });
-          // City label tooltip on the outline
+          // City label
           const center = L.polygon(coords).getBounds().getCenter();
           activeLayerGroup.addLayer(
             L.marker(center, { opacity: 0 })
@@ -389,11 +426,11 @@
         } else if (city.lat && city.lng) {
           // Fallback: cluster of dots around city center
           for (let i = 0; i < 12; i++) {
-            const dlat = (Math.random() - 0.5) * 0.04;
-            const dlng = (Math.random() - 0.5) * 0.04;
+            const dlat = (rand() - 0.5) * 0.04;
+            const dlng = (rand() - 0.5) * 0.04;
             activeLayerGroup.addLayer(
               L.circleMarker([city.lat + dlat, city.lng + dlng], {
-                radius: 4, color: '#cc0000', fillColor: ALERT_COLOR, fillOpacity: 0.9, weight: 1,
+                radius: 4, color: dotStroke, fillColor: dotColor, fillOpacity: 0.9, weight: 1,
               })
             );
           }
@@ -429,6 +466,10 @@
       badge.textContent = 'שקט';
       activeLayerGroup.clearLayers();
       prevAlertId = null;
+      currentAlert = null;
+      alertStartMs = null;
+      if (colorTimer) { clearTimeout(colorTimer); colorTimer = null; }
+      if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; }
       return;
     }
 
@@ -453,8 +494,34 @@
     }
 
     if (alert.id !== prevAlertId && dataReady) {
-      prevAlertId = alert.id;
+      prevAlertId  = alert.id;
+      currentAlert = alert;
+
+      // Cancel previous timers
+      if (colorTimer) { clearTimeout(colorTimer); colorTimer = null; }
+      if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; }
+
+      if (!ended && !isHatara(alert)) {
+        // New אזעקה — start timing
+        alertStartMs = Date.now();
+
+        // At 90 s: redraw dots in blue
+        colorTimer = setTimeout(() => {
+          if (currentAlert && currentAlert.id === alert.id) drawForAlert(currentAlert);
+        }, DOT_RED_MS);
+
+        // At 9.5 min: clear dots
+        clearTimer = setTimeout(() => {
+          if (currentAlert && currentAlert.id === alert.id) activeLayerGroup.clearLayers();
+        }, DOT_CLEAR_MS);
+      } else {
+        alertStartMs = null;
+      }
+
       drawForAlert(alert);
+    } else if (alert.id === prevAlertId && dataReady) {
+      // Same alert, still active — update currentAlert ref in case of re-mount
+      currentAlert = alert;
     }
   }
 
