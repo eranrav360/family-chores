@@ -30,6 +30,9 @@
       background: #1a1d27;
       border-bottom: 1px solid #2a2d3a;
       padding: 10px 16px;
+      padding-top: max(10px, env(safe-area-inset-top));
+      padding-left:  max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
       display: flex;
       align-items: center;
       gap: 12px;
@@ -100,8 +103,8 @@
 
     #legend {
       position: absolute;
-      bottom: 24px;
-      left: 12px;
+      bottom: max(24px, calc(env(safe-area-inset-bottom) + 8px));
+      left: max(12px, env(safe-area-inset-left));
       background: rgba(26,29,39,0.92);
       border: 1px solid #2a2d3a;
       border-radius: 8px;
@@ -117,8 +120,7 @@
       display: flex; gap: 3px; align-items: center;
     }
     .leg-dot-sample span {
-      width: 6px; height: 6px; border-radius: 50%;
-      background: #ff4444; display: inline-block;
+      width: 7px; height: 7px; border-radius: 50%; display: inline-block;
     }
 
     #last-updated {
@@ -222,8 +224,13 @@
     התרעה – פוליגון אזור
   </div>
   <div class="leg-row">
-    <div class="leg-dot-sample"><span></span><span></span><span></span></div>
-    אזעקה – נקודות בתוך האזור
+    <div class="leg-dot-sample">
+      <span style="background:#ff2222"></span>
+      <span style="background:#e84444"></span>
+      <span style="background:#cc6666"></span>
+      <span style="background:#aa7777"></span>
+    </div>
+    אזעקה – חדש&nbsp;←&nbsp;ישן
   </div>
   <div class="leg-row">
     <div class="leg-box" style="background:#ff8800;opacity:0.5"></div>
@@ -324,126 +331,131 @@
     return Math.max(6, Math.min(40, Math.round(area * 18000)));
   }
 
-  // ── Alert rendering ────────────────────────────────────────────────────────
-  let activeLayerGroup = L.featureGroup().addTo(map);
-  let prevAlertId   = null;
-  let alertStartMs  = null; // when the current אזעקה was first detected
-  let currentAlert  = null; // latest alert object for timer callbacks
-  let colorTimer    = null; // setTimeout → redraws dots blue at 90 s
-  let clearTimer    = null; // setTimeout → clears dots at 9.5 min
+  // ── Alert layer management ──────────────────────────────────────────────────
+  // alertLayers: Map<id, { alert, layerGroup, startMs, clearTimer }>
+  const alertLayers = new Map();
+  let latestAlertId       = null;
+  let colorRedrawInterval = null;
 
-  const ALERT_COLOR  = '#ff4444'; // red  — 0–90 s
-  const BLUE_COLOR   = '#4488ff'; // blue — 90 s – 9.5 min
   const WARN_COLOR   = '#ff8844';
   const ENDED_COLOR  = '#ff8800';
-
-  const DOT_RED_MS   =   90_000; // 1 min 30 s
   const DOT_CLEAR_MS =  570_000; // 9 min 30 s
 
   // Detect pre-alarm (התרעה) vs actual siren (אזעקה).
-  // Pre-alarm: title starts with "התרעה", OR desc mentions upcoming alerts.
   function isHatara(alert) {
     if (alert.title && alert.title.startsWith('התרעה')) return true;
     if (alert.desc && alert.desc.includes('בדקות הקרובות')) return true;
     return false;
   }
 
-  function drawForAlert(alert) {
-    activeLayerGroup.clearLayers();
+  // Age → colour: bright red #ff2222 fading to muted rose #aa7777 over 9.5 min
+  function dotColorForAge(ageMs) {
+    const t = Math.min(1, ageMs / DOT_CLEAR_MS);
+    const r = Math.round(255 - t * 85);  // 255 → 170
+    const g = Math.round(34  + t * 85);  // 34  → 119
+    const b = Math.round(34  + t * 85);  // 34  → 119
+    return `rgb(${r},${g},${b})`;
+  }
+  function dotStrokeForAge(ageMs) {
+    const t = Math.min(1, ageMs / DOT_CLEAR_MS);
+    return `rgb(${Math.round(200 - t*70)},${Math.round(t*80)},${Math.round(t*80)})`;
+  }
+  function dotOpacityForAge(ageMs) {
+    return Math.max(0.35, 0.9 - (ageMs / DOT_CLEAR_MS) * 0.55);
+  }
+
+  function drawLayer(entry) {
+    const { alert, layerGroup, startMs } = entry;
+    layerGroup.clearLayers();
+    if (!dataReady) return;
 
     const ended  = alert.cat === '10';
     const hatara = !ended && isHatara(alert);
-    const cityNames = alert.data || [];
+    const ageMs  = Date.now() - startMs;
+    if (!ended && !hatara && ageMs >= DOT_CLEAR_MS) return;
 
-    cityNames.forEach(name => {
+    (alert.data || []).forEach(name => {
       const city = citiesByName[name];
       if (!city) return;
-
       const coords = polygonsData[String(city.id)];
 
       if (ended) {
-        // Always show polygon outline in orange
-        const layer = coords && coords.length >= 3
+        const lyr = coords && coords.length >= 3
           ? L.polygon(coords, { color: ENDED_COLOR, fillColor: ENDED_COLOR, fillOpacity: 0.25, weight: 1.5, opacity: 0.7 })
           : L.circle([city.lat, city.lng], { radius: 2500, color: ENDED_COLOR, fillColor: ENDED_COLOR, fillOpacity: 0.25, weight: 1.5 });
-        layer.bindTooltip(name);
-        activeLayerGroup.addLayer(layer);
+        lyr.bindTooltip(name);
+        layerGroup.addLayer(lyr);
 
       } else if (hatara) {
-        // התרעה → filled polygon
         if (coords && coords.length >= 3) {
-          const poly = L.polygon(coords, {
-            color: WARN_COLOR, fillColor: WARN_COLOR,
-            fillOpacity: 0.45, weight: 2, opacity: 0.9,
-          });
-          poly.bindTooltip(name, { direction: 'center' });
-          activeLayerGroup.addLayer(poly);
+          layerGroup.addLayer(
+            L.polygon(coords, { color: WARN_COLOR, fillColor: WARN_COLOR, fillOpacity: 0.45, weight: 2, opacity: 0.9 })
+              .bindTooltip(name, { direction: 'center' })
+          );
         } else if (city.lat && city.lng) {
-          activeLayerGroup.addLayer(
-            L.circle([city.lat, city.lng], {
-              radius: 3000, color: WARN_COLOR, fillColor: WARN_COLOR, fillOpacity: 0.45, weight: 2,
-            }).bindTooltip(name)
+          layerGroup.addLayer(
+            L.circle([city.lat, city.lng], { radius: 3000, color: WARN_COLOR, fillColor: WARN_COLOR, fillOpacity: 0.45, weight: 2 })
+              .bindTooltip(name)
           );
         }
 
       } else {
-        // אזעקה → polygon outline + scattered dots inside
-        // Dot color: red for first 90 s, blue for next 8 min, then cleared.
-        const elapsed  = alertStartMs ? Date.now() - alertStartMs : 0;
-        if (elapsed >= DOT_CLEAR_MS) return; // already past clear time, skip city
-
-        const dotColor   = elapsed < DOT_RED_MS ? ALERT_COLOR : BLUE_COLOR;
-        const dotStroke  = elapsed < DOT_RED_MS ? '#cc0000'   : '#2255bb';
-        const rand = seededRand(name + (currentAlert ? currentAlert.id : ''));
+        // אזעקה — age-based colour + opacity
+        const dotColor  = dotColorForAge(ageMs);
+        const dotStroke = dotStrokeForAge(ageMs);
+        const opacity   = dotOpacityForAge(ageMs);
+        const rand = seededRand(name + alert.id);
 
         if (coords && coords.length >= 3) {
-          // Faint outline
-          activeLayerGroup.addLayer(
-            L.polygon(coords, {
-              color: dotColor, fillColor: dotColor,
-              fillOpacity: 0.08, weight: 1.5, opacity: 0.6,
-            })
+          layerGroup.addLayer(
+            L.polygon(coords, { color: dotColor, fillColor: dotColor, fillOpacity: 0.08 * opacity, weight: 1.5, opacity: 0.5 * opacity })
           );
-          // Dots — deterministic positions via seededRand
-          const n = dotCount(coords);
-          dotsInsidePolygon(coords, n, rand).forEach(([lat, lng]) => {
-            activeLayerGroup.addLayer(
-              L.circleMarker([lat, lng], {
-                radius: 4,
-                color: dotStroke,
-                fillColor: dotColor,
-                fillOpacity: 0.9,
-                weight: 1,
-              })
+          dotsInsidePolygon(coords, dotCount(coords), rand).forEach(([lat, lng]) => {
+            layerGroup.addLayer(
+              L.circleMarker([lat, lng], { radius: 4, color: dotStroke, fillColor: dotColor, fillOpacity: opacity, weight: 1 })
             );
           });
-          // City label
           const center = L.polygon(coords).getBounds().getCenter();
-          activeLayerGroup.addLayer(
-            L.marker(center, { opacity: 0 })
-              .bindTooltip(name, { permanent: false, direction: 'center' })
+          layerGroup.addLayer(
+            L.marker(center, { opacity: 0 }).bindTooltip(name, { permanent: false, direction: 'center' })
           );
         } else if (city.lat && city.lng) {
-          // Fallback: cluster of dots around city center
           for (let i = 0; i < 12; i++) {
             const dlat = (rand() - 0.5) * 0.04;
             const dlng = (rand() - 0.5) * 0.04;
-            activeLayerGroup.addLayer(
-              L.circleMarker([city.lat + dlat, city.lng + dlng], {
-                radius: 4, color: dotStroke, fillColor: dotColor, fillOpacity: 0.9, weight: 1,
-              })
+            layerGroup.addLayer(
+              L.circleMarker([city.lat + dlat, city.lng + dlng], { radius: 4, color: dotStroke, fillColor: dotColor, fillOpacity: opacity, weight: 1 })
             );
           }
         }
       }
     });
-
-    // Zoom to fit
-    const bounds = activeLayerGroup.getBounds();
-    if (bounds.isValid()) map.fitBounds(bounds.pad(0.25));
   }
 
-  // ── UI update ──────────────────────────────────────────────────────────────
+  // Recolour all active layers every 30 s; remove expired ones
+  function reapAndRedraw() {
+    const now = Date.now();
+    for (const [id, entry] of alertLayers) {
+      if (!isHatara(entry.alert) && entry.alert.cat !== '10' && now - entry.startMs >= DOT_CLEAR_MS) {
+        entry.layerGroup.remove();
+        alertLayers.delete(id);
+      } else {
+        drawLayer(entry);
+      }
+    }
+  }
+
+  function clearAllAlerts() {
+    for (const entry of alertLayers.values()) {
+      if (entry.clearTimer) clearTimeout(entry.clearTimer);
+      entry.layerGroup.remove();
+    }
+    alertLayers.clear();
+    latestAlertId = null;
+    if (colorRedrawInterval) { clearInterval(colorRedrawInterval); colorRedrawInterval = null; }
+  }
+
+  // ── UI update ───────────────────────────────────────────────────────────────
   const CAT_LABELS = {
     '1': 'ירי רקטות וטילים', '2': 'טילים בלתי-קונבנציונליים',
     '3': 'רעידת אדמה', '4': 'אירוע רדיואקטיבי', '5': 'צונאמי',
@@ -458,18 +470,13 @@
     const badge  = document.getElementById('mode-badge');
 
     if (!alert || !alert.data || alert.data.length === 0) {
-      dot.className    = '';
-      text.className   = '';
-      text.textContent = 'אין התרעות פעילות כרגע';
+      dot.className      = '';
+      text.className     = '';
+      text.textContent   = 'אין התרעות פעילות כרגע';
       cities.textContent = '';
-      badge.className  = '';
-      badge.textContent = 'שקט';
-      activeLayerGroup.clearLayers();
-      prevAlertId = null;
-      currentAlert = null;
-      alertStartMs = null;
-      if (colorTimer) { clearTimeout(colorTimer); colorTimer = null; }
-      if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; }
+      badge.className    = '';
+      badge.textContent  = 'שקט';
+      clearAllAlerts();
       return;
     }
 
@@ -477,51 +484,65 @@
     const hatara = !ended && isHatara(alert);
     const label  = CAT_LABELS[alert.cat] || alert.title || 'התרעה';
 
-    dot.className    = ended ? 'ended' : 'active';
-    text.className   = ended ? '' : 'active';
-    text.textContent = label;
+    dot.className      = ended ? 'ended' : 'active';
+    text.className     = ended ? '' : 'active';
+    text.textContent   = label;
     cities.textContent = alert.data.join(' | ');
 
     if (ended) {
-      badge.className  = '';
+      badge.className   = '';
       badge.textContent = 'האירוע הסתיים';
     } else if (hatara) {
-      badge.className  = 'hatara';
+      badge.className   = 'hatara';
       badge.textContent = '⚠ התרעה';
     } else {
-      badge.className  = 'azaka';
+      badge.className   = 'azaka';
       badge.textContent = '🔴 אזעקה';
     }
 
-    if (alert.id !== prevAlertId && dataReady) {
-      prevAlertId  = alert.id;
-      currentAlert = alert;
+    if (!dataReady) return;
 
-      // Cancel previous timers
-      if (colorTimer) { clearTimeout(colorTimer); colorTimer = null; }
-      if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; }
+    if (ended) {
+      // Terminal state: clear history, show ended polygons
+      clearAllAlerts();
+      const lg    = L.featureGroup().addTo(map);
+      const entry = { alert, layerGroup: lg, startMs: Date.now(), clearTimer: null };
+      alertLayers.set(alert.id, entry);
+      latestAlertId = alert.id;
+      drawLayer(entry);
+      const bounds = lg.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds.pad(0.25));
 
-      if (!ended && !isHatara(alert)) {
-        // New אזעקה — start timing
-        alertStartMs = Date.now();
+    } else if (alert.id !== latestAlertId) {
+      // New alert — add new layer on top; keep older layers visible
+      latestAlertId = alert.id;
 
-        // At 90 s: redraw dots in blue
-        colorTimer = setTimeout(() => {
-          if (currentAlert && currentAlert.id === alert.id) drawForAlert(currentAlert);
-        }, DOT_RED_MS);
+      if (!alertLayers.has(alert.id)) {
+        const lg      = L.featureGroup().addTo(map);
+        const startMs = Date.now();
+        const entry   = { alert, layerGroup: lg, startMs, clearTimer: null };
 
-        // At 9.5 min: clear dots
-        clearTimer = setTimeout(() => {
-          if (currentAlert && currentAlert.id === alert.id) activeLayerGroup.clearLayers();
+        entry.clearTimer = setTimeout(() => {
+          const e = alertLayers.get(alert.id);
+          if (e) { e.layerGroup.remove(); alertLayers.delete(alert.id); }
         }, DOT_CLEAR_MS);
-      } else {
-        alertStartMs = null;
+
+        alertLayers.set(alert.id, entry);
+        drawLayer(entry);
+
+        const bounds = lg.getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds.pad(0.25));
+
+        // Periodic colour-aging (start once, keep running while any layers exist)
+        if (!colorRedrawInterval) {
+          colorRedrawInterval = setInterval(reapAndRedraw, 30_000);
+        }
       }
 
-      drawForAlert(alert);
-    } else if (alert.id === prevAlertId && dataReady) {
-      // Same alert, still active — update currentAlert ref in case of re-mount
-      currentAlert = alert;
+    } else {
+      // Same alert id — update ref in case data changed
+      const entry = alertLayers.get(alert.id);
+      if (entry) entry.alert = alert;
     }
   }
 
