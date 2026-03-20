@@ -220,21 +220,24 @@
 
 <div id="legend">
   <div class="leg-row">
-    <div class="leg-box" style="background:#ff8844;opacity:0.6"></div>
-    התרעה – פוליגון אזור
+    <div class="leg-box" style="background:#b8860b;opacity:0.8"></div>
+    התרעה – ירי צפוי
   </div>
   <div class="leg-row">
     <div class="leg-dot-sample">
       <span style="background:#ff2222"></span>
-      <span style="background:#e84444"></span>
-      <span style="background:#cc6666"></span>
-      <span style="background:#aa7777"></span>
+      <span style="background:#ff2222"></span>
+      <span style="background:#ff2222"></span>
     </div>
-    אזעקה – חדש&nbsp;←&nbsp;ישן
+    אזעקה פעילה (0–90 שנ')
   </div>
   <div class="leg-row">
-    <div class="leg-box" style="background:#ff8800;opacity:0.5"></div>
-    האירוע הסתיים
+    <div class="leg-dot-sample">
+      <span style="background:#4488ff"></span>
+      <span style="background:#4488ff"></span>
+      <span style="background:#4488ff"></span>
+    </div>
+    אזעקה לאחר 90 שנ'
   </div>
 </div>
 <div id="last-updated"></div>
@@ -331,128 +334,92 @@
     return Math.max(6, Math.min(40, Math.round(area * 18000)));
   }
 
-  // ── Alert layer management ──────────────────────────────────────────────────
-  // alertLayers: Map<id, { alert, layerGroup, startMs, clearTimer }>
-  const alertLayers = new Map();
-  let latestAlertId       = null;
-  let colorRedrawInterval = null;
+  // ── Alert state ─────────────────────────────────────────────────────────────
+  // hataraEntry:  { alert, layerGroup } | null  — single mustard pre-alarm polygon
+  // azakaEntries: Map<id, { alert, layerGroup, colorTimer, isBlue }>  — rocket dot layers
+  let hataraEntry    = null;
+  const azakaEntries = new Map();
+  let latestAlertId  = null;
 
-  const WARN_COLOR   = '#ff8844';
-  const ENDED_COLOR  = '#ff8800';
-  const DOT_CLEAR_MS =  570_000; // 9 min 30 s
+  const HATARA_COLOR = '#b8860b';   // dark goldenrod / mustard
+  const RED_COLOR    = '#ff2222';
+  const BLUE_COLOR   = '#4488ff';
+  const DOT_RED_MS   =  90_000;    // 90 s → turn dots blue
 
-  // Detect pre-alarm (התרעה) vs actual siren (אזעקה).
+  // Detect pre-alarm (התרעה) vs actual siren (אזעקה)
   function isHatara(alert) {
     if (alert.title && alert.title.startsWith('התרעה')) return true;
     if (alert.desc && alert.desc.includes('בדקות הקרובות')) return true;
     return false;
   }
 
-  // Age → colour: bright red #ff2222 fading to muted rose #aa7777 over 9.5 min
-  function dotColorForAge(ageMs) {
-    const t = Math.min(1, ageMs / DOT_CLEAR_MS);
-    const r = Math.round(255 - t * 85);  // 255 → 170
-    const g = Math.round(34  + t * 85);  // 34  → 119
-    const b = Math.round(34  + t * 85);  // 34  → 119
-    return `rgb(${r},${g},${b})`;
-  }
-  function dotStrokeForAge(ageMs) {
-    const t = Math.min(1, ageMs / DOT_CLEAR_MS);
-    return `rgb(${Math.round(200 - t*70)},${Math.round(t*80)},${Math.round(t*80)})`;
-  }
-  function dotOpacityForAge(ageMs) {
-    return Math.max(0.35, 0.9 - (ageMs / DOT_CLEAR_MS) * 0.55);
-  }
-
-  function drawLayer(entry) {
-    const { alert, layerGroup, startMs } = entry;
+  // Draw mustard polygon for a התרעה entry
+  function drawHataraLayer(entry) {
+    const { alert, layerGroup } = entry;
     layerGroup.clearLayers();
     if (!dataReady) return;
-
-    const ended  = alert.cat === '10';
-    const hatara = !ended && isHatara(alert);
-    const ageMs  = Date.now() - startMs;
-    if (!ended && !hatara && ageMs >= DOT_CLEAR_MS) return;
-
     (alert.data || []).forEach(name => {
       const city = citiesByName[name];
       if (!city) return;
       const coords = polygonsData[String(city.id)];
+      if (coords && coords.length >= 3) {
+        layerGroup.addLayer(
+          L.polygon(coords, { color: HATARA_COLOR, fillColor: HATARA_COLOR, fillOpacity: 0.35, weight: 2, opacity: 0.85 })
+            .bindTooltip(name, { direction: 'center' })
+        );
+      } else if (city.lat && city.lng) {
+        layerGroup.addLayer(
+          L.circle([city.lat, city.lng], { radius: 3000, color: HATARA_COLOR, fillColor: HATARA_COLOR, fillOpacity: 0.35, weight: 2 })
+            .bindTooltip(name)
+        );
+      }
+    });
+  }
 
-      if (ended) {
-        const lyr = coords && coords.length >= 3
-          ? L.polygon(coords, { color: ENDED_COLOR, fillColor: ENDED_COLOR, fillOpacity: 0.25, weight: 1.5, opacity: 0.7 })
-          : L.circle([city.lat, city.lng], { radius: 2500, color: ENDED_COLOR, fillColor: ENDED_COLOR, fillOpacity: 0.25, weight: 1.5 });
-        lyr.bindTooltip(name);
-        layerGroup.addLayer(lyr);
-
-      } else if (hatara) {
-        if (coords && coords.length >= 3) {
+  // Draw dots (red or blue) for an אזעקה entry
+  function drawAzakaLayer(entry, dotColor) {
+    const { alert, layerGroup } = entry;
+    const stroke = dotColor === RED_COLOR ? '#cc0000' : '#2255bb';
+    layerGroup.clearLayers();
+    if (!dataReady) return;
+    (alert.data || []).forEach(name => {
+      const city = citiesByName[name];
+      if (!city) return;
+      const coords = polygonsData[String(city.id)];
+      const rand = seededRand(name + alert.id);
+      if (coords && coords.length >= 3) {
+        layerGroup.addLayer(
+          L.polygon(coords, { color: dotColor, fillColor: dotColor, fillOpacity: 0.08, weight: 1.5, opacity: 0.5 })
+        );
+        dotsInsidePolygon(coords, dotCount(coords), rand).forEach(([lat, lng]) => {
           layerGroup.addLayer(
-            L.polygon(coords, { color: WARN_COLOR, fillColor: WARN_COLOR, fillOpacity: 0.45, weight: 2, opacity: 0.9 })
-              .bindTooltip(name, { direction: 'center' })
+            L.circleMarker([lat, lng], { radius: 4, color: stroke, fillColor: dotColor, fillOpacity: 0.9, weight: 1 })
           );
-        } else if (city.lat && city.lng) {
+        });
+        const center = L.polygon(coords).getBounds().getCenter();
+        layerGroup.addLayer(
+          L.marker(center, { opacity: 0 }).bindTooltip(name, { permanent: false, direction: 'center' })
+        );
+      } else if (city.lat && city.lng) {
+        for (let i = 0; i < 12; i++) {
+          const dlat = (rand() - 0.5) * 0.04;
+          const dlng = (rand() - 0.5) * 0.04;
           layerGroup.addLayer(
-            L.circle([city.lat, city.lng], { radius: 3000, color: WARN_COLOR, fillColor: WARN_COLOR, fillOpacity: 0.45, weight: 2 })
-              .bindTooltip(name)
+            L.circleMarker([city.lat + dlat, city.lng + dlng], { radius: 4, color: stroke, fillColor: dotColor, fillOpacity: 0.9, weight: 1 })
           );
-        }
-
-      } else {
-        // אזעקה — age-based colour + opacity
-        const dotColor  = dotColorForAge(ageMs);
-        const dotStroke = dotStrokeForAge(ageMs);
-        const opacity   = dotOpacityForAge(ageMs);
-        const rand = seededRand(name + alert.id);
-
-        if (coords && coords.length >= 3) {
-          layerGroup.addLayer(
-            L.polygon(coords, { color: dotColor, fillColor: dotColor, fillOpacity: 0.08 * opacity, weight: 1.5, opacity: 0.5 * opacity })
-          );
-          dotsInsidePolygon(coords, dotCount(coords), rand).forEach(([lat, lng]) => {
-            layerGroup.addLayer(
-              L.circleMarker([lat, lng], { radius: 4, color: dotStroke, fillColor: dotColor, fillOpacity: opacity, weight: 1 })
-            );
-          });
-          const center = L.polygon(coords).getBounds().getCenter();
-          layerGroup.addLayer(
-            L.marker(center, { opacity: 0 }).bindTooltip(name, { permanent: false, direction: 'center' })
-          );
-        } else if (city.lat && city.lng) {
-          for (let i = 0; i < 12; i++) {
-            const dlat = (rand() - 0.5) * 0.04;
-            const dlng = (rand() - 0.5) * 0.04;
-            layerGroup.addLayer(
-              L.circleMarker([city.lat + dlat, city.lng + dlng], { radius: 4, color: dotStroke, fillColor: dotColor, fillOpacity: opacity, weight: 1 })
-            );
-          }
         }
       }
     });
   }
 
-  // Recolour all active layers every 30 s; remove expired ones
-  function reapAndRedraw() {
-    const now = Date.now();
-    for (const [id, entry] of alertLayers) {
-      if (!isHatara(entry.alert) && entry.alert.cat !== '10' && now - entry.startMs >= DOT_CLEAR_MS) {
-        entry.layerGroup.remove();
-        alertLayers.delete(id);
-      } else {
-        drawLayer(entry);
-      }
-    }
-  }
-
   function clearAllAlerts() {
-    for (const entry of alertLayers.values()) {
-      if (entry.clearTimer) clearTimeout(entry.clearTimer);
-      entry.layerGroup.remove();
+    if (hataraEntry) { hataraEntry.layerGroup.remove(); hataraEntry = null; }
+    for (const e of azakaEntries.values()) {
+      if (e.colorTimer) clearTimeout(e.colorTimer);
+      e.layerGroup.remove();
     }
-    alertLayers.clear();
+    azakaEntries.clear();
     latestAlertId = null;
-    if (colorRedrawInterval) { clearInterval(colorRedrawInterval); colorRedrawInterval = null; }
   }
 
   // ── UI update ───────────────────────────────────────────────────────────────
@@ -469,14 +436,18 @@
     const cities = document.getElementById('cities-list');
     const badge  = document.getElementById('mode-badge');
 
+    // ── No active alert from API ───────────────────────────────────────────────
+    // Keep existing dots on map — they only clear on explicit האירוע הסתיים
     if (!alert || !alert.data || alert.data.length === 0) {
-      dot.className      = '';
-      text.className     = '';
-      text.textContent   = 'אין התרעות פעילות כרגע';
-      cities.textContent = '';
-      badge.className    = '';
-      badge.textContent  = 'שקט';
-      clearAllAlerts();
+      const hasActive = azakaEntries.size > 0 || hataraEntry;
+      dot.className     = hasActive ? 'ended' : '';
+      text.className    = '';
+      text.textContent  = hasActive ? 'אין התרעות חדשות' : 'אין התרעות פעילות כרגע';
+      if (!hasActive) {
+        cities.textContent = '';
+        badge.className    = '';
+        badge.textContent  = 'שקט';
+      }
       return;
     }
 
@@ -502,48 +473,43 @@
 
     if (!dataReady) return;
 
+    // ── האירוע הסתיים → clear everything ──────────────────────────────────────
     if (ended) {
-      // Terminal state: clear history, show ended polygons
       clearAllAlerts();
-      const lg    = L.featureGroup().addTo(map);
-      const entry = { alert, layerGroup: lg, startMs: Date.now(), clearTimer: null };
-      alertLayers.set(alert.id, entry);
-      latestAlertId = alert.id;
-      drawLayer(entry);
+      return;
+    }
+
+    if (alert.id === latestAlertId) return;  // same alert, nothing to draw
+    latestAlertId = alert.id;
+
+    // ── התרעה → draw / replace mustard polygon ─────────────────────────────────
+    if (hatara) {
+      if (hataraEntry) { hataraEntry.layerGroup.remove(); hataraEntry = null; }
+      const lg = L.featureGroup().addTo(map);
+      hataraEntry = { alert, layerGroup: lg };
+      drawHataraLayer(hataraEntry);
       const bounds = lg.getBounds();
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.25));
-
-    } else if (alert.id !== latestAlertId) {
-      // New alert — add new layer on top; keep older layers visible
-      latestAlertId = alert.id;
-
-      if (!alertLayers.has(alert.id)) {
-        const lg      = L.featureGroup().addTo(map);
-        const startMs = Date.now();
-        const entry   = { alert, layerGroup: lg, startMs, clearTimer: null };
-
-        entry.clearTimer = setTimeout(() => {
-          const e = alertLayers.get(alert.id);
-          if (e) { e.layerGroup.remove(); alertLayers.delete(alert.id); }
-        }, DOT_CLEAR_MS);
-
-        alertLayers.set(alert.id, entry);
-        drawLayer(entry);
-
-        const bounds = lg.getBounds();
-        if (bounds.isValid()) map.fitBounds(bounds.pad(0.25));
-
-        // Periodic colour-aging (start once, keep running while any layers exist)
-        if (!colorRedrawInterval) {
-          colorRedrawInterval = setInterval(reapAndRedraw, 30_000);
-        }
-      }
-
-    } else {
-      // Same alert id — update ref in case data changed
-      const entry = alertLayers.get(alert.id);
-      if (entry) entry.alert = alert;
+      return;
     }
+
+    // ── ירי רקטות (or other alarm) → remove hatara, accumulate red dots ────────
+    if (hataraEntry) { hataraEntry.layerGroup.remove(); hataraEntry = null; }
+
+    const lg    = L.featureGroup().addTo(map);
+    const entry = { alert, layerGroup: lg, colorTimer: null, isBlue: false };
+
+    // After 90 s turn dots blue; stay blue until האירוע הסתיים
+    entry.colorTimer = setTimeout(() => {
+      const e = azakaEntries.get(alert.id);
+      if (e && !e.isBlue) { e.isBlue = true; drawAzakaLayer(e, BLUE_COLOR); }
+    }, DOT_RED_MS);
+
+    azakaEntries.set(alert.id, entry);
+    drawAzakaLayer(entry, RED_COLOR);
+
+    const bounds = lg.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds.pad(0.25));
   }
 
   // ── CF Worker URL (stored in localStorage, configurable via ⚙ button) ──────
