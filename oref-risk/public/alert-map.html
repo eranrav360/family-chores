@@ -101,6 +101,11 @@
 
     #map { flex: 1; }
 
+    /* Dark map: invert OSM tiles so Hebrew labels stay readable on dark bg */
+    .leaflet-tile-pane {
+      filter: invert(100%) hue-rotate(180deg) brightness(0.88) saturate(1.1);
+    }
+
     #legend {
       position: absolute;
       bottom: max(24px, calc(env(safe-area-inset-bottom) + 8px));
@@ -250,9 +255,9 @@
     zoomControl: true,
   });
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO',
-    subdomains: 'abcd',
+  // OSM tiles show Hebrew labels in Israel; dark-invert CSS makes them dark
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19
   }).addTo(map);
 
@@ -655,8 +660,89 @@
     updateProxyIndicator('vercel');
   });
 
+  // ── Israel UTC offset (client-side mirror of server helper) ───────────────
+  function israelOffsetClient() {
+    const m = new Date().getMonth(); // 0-indexed; DST Apr(3)–Oct(9)
+    return (m >= 3 && m <= 9) ? '+03:00' : '+02:00';
+  }
+
+  // ── 10-minute history backfill ─────────────────────────────────────────────
+  // Runs once on load so alarms from the last 10 min are visible immediately.
+  async function loadInitialHistory() {
+    try {
+      const WINDOW_MS = 10 * 60 * 1000;  // 10 minutes
+      const BURST_GAP = 90 * 1000;       // group records within 90 s as one burst
+
+      const r = await fetch('/api/history?mode=1');
+      const { alerts } = await r.json();
+      if (!alerts || !alerts.length) return;
+
+      const offset = israelOffsetClient();
+      const now    = Date.now();
+
+      // Parse timestamps and keep only the last 10 min
+      const recent = alerts
+        .filter(a => a.category === 1 || a.category === 6)
+        .map(a => ({ ...a, ts: new Date(a.alertDate.replace(' ', 'T') + offset).getTime() }))
+        .filter(a => a.ts <= now && now - a.ts <= WINDOW_MS)
+        .sort((a, b) => a.ts - b.ts);   // oldest first
+
+      if (!recent.length) return;
+
+      // Group consecutive records into bursts (gap < BURST_GAP)
+      const bursts = [];
+      let burst = [recent[0]];
+      for (let i = 1; i < recent.length; i++) {
+        if (recent[i].ts - burst[burst.length - 1].ts <= BURST_GAP) {
+          burst.push(recent[i]);
+        } else {
+          bursts.push(burst);
+          burst = [recent[i]];
+        }
+      }
+      bursts.push(burst);
+
+      for (const b of bursts) {
+        const cities = [...new Set(b.map(a => a.data))];
+        const ageMs  = now - b[0].ts;
+        const id     = `hist-${b[0].rid}`;
+        const cat    = String(b[0].category);
+
+        if (azakaEntries.has(id)) continue;  // live poll already drew this
+
+        const syntheticAlert = { id, cat, data: cities,
+          title: cat === '1' ? 'ירי רקטות וטילים' : 'כלי טיס עוין', desc: '' };
+
+        const lg     = L.featureGroup().addTo(map);
+        const isBlue = ageMs >= DOT_RED_MS;
+        const entry  = { alert: syntheticAlert, layerGroup: lg, colorTimer: null, isBlue };
+
+        drawAzakaLayer(entry, isBlue ? BLUE_COLOR : RED_COLOR);
+
+        if (!isBlue) {
+          const remaining = DOT_RED_MS - ageMs;
+          entry.colorTimer = setTimeout(() => {
+            const e = azakaEntries.get(id);
+            if (e && !e.isBlue) { e.isBlue = true; drawAzakaLayer(e, BLUE_COLOR); }
+          }, remaining);
+        }
+
+        azakaEntries.set(id, entry);
+      }
+
+      if (azakaEntries.size > 0) {
+        document.getElementById('alert-dot').className  = 'ended';
+        document.getElementById('status-text').className = '';
+        document.getElementById('status-text').textContent = 'התרעות אחרונות (10 דקות)';
+      }
+    } catch (e) {
+      console.warn('[oref] history backfill failed:', e.message);
+    }
+  }
+
   // ── Start ──────────────────────────────────────────────────────────────────
-  loadGeoData().then(() => {
+  loadGeoData().then(async () => {
+    await loadInitialHistory();   // show last 10 min before first live poll
     poll();
     setInterval(poll, 15000);
   });
