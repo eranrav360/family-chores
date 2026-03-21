@@ -225,7 +225,7 @@
 
 <div id="legend">
   <div class="leg-row">
-    <div class="leg-box" style="background:#b8860b;opacity:0.8"></div>
+    <div class="leg-box" style="background:#cc1111;opacity:0.8"></div>
     התרעה – ירי צפוי
   </div>
   <div class="leg-row">
@@ -255,9 +255,9 @@
     zoomControl: true,
   });
 
-  // OSM tiles show Hebrew labels in Israel; dark-invert CSS makes them dark
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  // Wikimedia tiles: clean reference style, Hebrew labels in Israel, dark via CSS
+  L.tileLayer('https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://maps.wikimedia.org">Wikimedia Maps</a>',
     maxZoom: 19
   }).addTo(map);
 
@@ -346,39 +346,74 @@
   const azakaEntries = new Map();
   let latestAlertId  = null;
 
-  const HATARA_COLOR = '#b8860b';   // dark goldenrod / mustard
+  const HATARA_COLOR = '#cc1111';   // red border, matching Pikud HaOref style
+  const HATARA_FILL  = '#ee3333';
   const RED_COLOR    = '#ff2222';
   const BLUE_COLOR   = '#4488ff';
   const DOT_RED_MS   =  90_000;    // 90 s → turn dots blue
 
-  // Detect pre-alarm (התרעה) vs actual siren (אזעקה)
+  // Detect pre-alarm (התרעה) — title or desc mentions "בדקות הקרובות" / starts with "התרעה"
   function isHatara(alert) {
-    if (alert.title && alert.title.startsWith('התרעה')) return true;
-    if (alert.desc && alert.desc.includes('בדקות הקרובות')) return true;
+    const t = alert.title || '';
+    const d = alert.desc  || '';
+    if (t.startsWith('התרעה')) return true;
+    if (t.includes('בדקות הקרובות')) return true;
+    if (d.includes('בדקות הקרובות')) return true;
     return false;
   }
 
-  // Draw mustard polygon for a התרעה entry
+  // Convex hull (Andrew's monotone chain) over [lat,lng] points
+  function convexHull(pts) {
+    if (pts.length < 3) return pts;
+    const sorted = [...pts].sort((a, b) => a[1] !== b[1] ? a[1] - b[1] : a[0] - b[0]);
+    const cross = (O, A, B) =>
+      (A[1] - O[1]) * (B[0] - O[0]) - (A[0] - O[0]) * (B[1] - O[1]);
+    const hull = new Array(2 * sorted.length);
+    let k = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      while (k >= 2 && cross(hull[k-2], hull[k-1], sorted[i]) <= 0) k--;
+      hull[k++] = sorted[i];
+    }
+    for (let i = sorted.length - 2, t = k + 1; i >= 0; i--) {
+      while (k >= t && cross(hull[k-2], hull[k-1], sorted[i]) <= 0) k--;
+      hull[k++] = sorted[i];
+    }
+    return hull.slice(0, k - 1);
+  }
+
+  // Draw a single unified convex-hull polygon for a התרעה entry
   function drawHataraLayer(entry) {
     const { alert, layerGroup } = entry;
     layerGroup.clearLayers();
     if (!dataReady) return;
+
+    // Gather all polygon vertices from all cities
+    const allPoints = [];
     (alert.data || []).forEach(name => {
       const city = citiesByName[name];
       if (!city) return;
       const coords = polygonsData[String(city.id)];
       if (coords && coords.length >= 3) {
-        layerGroup.addLayer(
-          L.polygon(coords, { color: HATARA_COLOR, fillColor: HATARA_COLOR, fillOpacity: 0.35, weight: 2, opacity: 0.85 })
-            .bindTooltip(name, { direction: 'center' })
-        );
+        allPoints.push(...coords);
       } else if (city.lat && city.lng) {
-        layerGroup.addLayer(
-          L.circle([city.lat, city.lng], { radius: 3000, color: HATARA_COLOR, fillColor: HATARA_COLOR, fillOpacity: 0.35, weight: 2 })
-            .bindTooltip(name)
+        const d = 0.025;
+        allPoints.push(
+          [city.lat - d, city.lng - d], [city.lat - d, city.lng + d],
+          [city.lat + d, city.lng - d], [city.lat + d, city.lng + d]
         );
       }
     });
+
+    if (allPoints.length < 3) return;
+    const hull = convexHull(allPoints);
+    if (hull.length < 3) return;
+
+    layerGroup.addLayer(
+      L.polygon(hull, {
+        color: HATARA_COLOR, fillColor: HATARA_FILL,
+        fillOpacity: 0.18, weight: 2.5, opacity: 0.9
+      })
+    );
   }
 
   // Draw dots (red or blue) for an אזעקה entry
