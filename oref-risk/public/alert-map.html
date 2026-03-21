@@ -101,9 +101,9 @@
 
     #map { flex: 1; }
 
-    /* Dark map: invert OSM tiles so Hebrew labels stay readable on dark bg */
+    /* Dark map: invert OSM tiles; low saturation reduces road/terrain clutter */
     .leaflet-tile-pane {
-      filter: invert(100%) hue-rotate(180deg) brightness(0.88) saturate(1.1);
+      filter: invert(100%) hue-rotate(180deg) brightness(0.75) saturate(0.45);
     }
 
     #legend {
@@ -225,7 +225,7 @@
 
 <div id="legend">
   <div class="leg-row">
-    <div class="leg-box" style="background:#cc1111;opacity:0.8"></div>
+    <div class="leg-box" style="background:#b8860b;opacity:0.8"></div>
     התרעה – ירי צפוי
   </div>
   <div class="leg-row">
@@ -255,9 +255,9 @@
     zoomControl: true,
   });
 
-  // Wikimedia tiles: clean reference style, Hebrew labels in Israel, dark via CSS
-  L.tileLayer('https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | <a href="https://maps.wikimedia.org">Wikimedia Maps</a>',
+  // OSM tiles inverted to dark; low saturation reduces visual clutter while keeping Hebrew labels
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19
   }).addTo(map);
 
@@ -346,8 +346,8 @@
   const azakaEntries = new Map();
   let latestAlertId  = null;
 
-  const HATARA_COLOR = '#cc1111';   // red border, matching Pikud HaOref style
-  const HATARA_FILL  = '#ee3333';
+  const HATARA_COLOR = '#b8860b';   // mustard / dark goldenrod
+  const HATARA_FILL  = '#daa520';   // goldenrod fill
   const RED_COLOR    = '#ff2222';
   const BLUE_COLOR   = '#4488ff';
   const DOT_RED_MS   =  90_000;    // 90 s → turn dots blue
