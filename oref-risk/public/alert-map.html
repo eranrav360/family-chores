@@ -620,7 +620,9 @@
         try {
           const rv = await fetch('/api/realtime');
           const vercel = await rv.json();
-          if (vercel.alert) return vercel;
+          // Ignore cat=10 (ended) from this path — stale history endings
+          // must not clear the map; only a live CF Worker cat=10 should do that.
+          if (vercel.alert && vercel.alert.cat !== '10') return vercel;
         } catch { /* ignore; return null below */ }
         return { alert: null };
       } catch (e) {
