@@ -202,9 +202,10 @@ function fetchRealtimeFromHistory() {
           resolve({
             id: `hist-${latest.rid}`,
             cat: String(latest.category),
-            title: latest.category === 1 ? 'ירי רקטות וטילים' : 'כלי טיס עוין',
+            // Preserve the actual title so pre-warnings (title contains 'התרעה') are detected
+            title: latest.title || (latest.category === 1 ? 'ירי רקטות וטילים' : 'כלי טיס עוין'),
             data: cities,
-            desc: '',
+            desc: latest.desc || '',
           });
         } catch { resolve(null); }
       });

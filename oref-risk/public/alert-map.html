@@ -607,17 +607,27 @@
       try {
         const r = await fetch(cfWorkerUrl, { cache: 'no-store' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        // oref returns empty body when quiet; Worker passes it through
         const text = await r.text();
         const trimmed = text.trim();
         updateProxyIndicator('cf');
-        if (!trimmed || trimmed.length < 5) return { alert: null };
-        return normaliseOrefResponse(JSON.parse(trimmed));
+        if (trimmed && trimmed.length >= 5) {
+          const parsed = normaliseOrefResponse(JSON.parse(trimmed));
+          if (parsed.alert) return parsed;   // active siren — done
+        }
+        // CF Worker quiet (oref alerts.json doesn't serve pre-warnings).
+        // Silently check Vercel too — it polls tzevaadom + history which
+        // may have the התרעה pre-warning when the direct endpoint doesn't.
+        try {
+          const rv = await fetch('/api/realtime');
+          const vercel = await rv.json();
+          if (vercel.alert) return vercel;
+        } catch { /* ignore; return null below */ }
+        return { alert: null };
       } catch (e) {
         console.warn('[oref] CF Worker failed:', e.message, '— trying Vercel fallback');
       }
     }
-    // Fallback: Vercel server (history-API based, may lag a few minutes)
+    // No CF Worker configured — use Vercel exclusively
     const r = await fetch('/api/realtime');
     updateProxyIndicator('vercel');
     return r.json();
@@ -746,23 +756,31 @@
         if (azakaEntries.has(id)) continue;  // live poll already drew this
 
         const syntheticAlert = { id, cat, data: cities,
-          title: cat === '1' ? 'ירי רקטות וטילים' : 'כלי טיס עוין', desc: '' };
+          // Preserve actual title so pre-warnings in history are detected by isHatara
+          title: b[0].title || (cat === '1' ? 'ירי רקטות וטילים' : 'כלי טיס עוין'),
+          desc: b[0].desc || '' };
 
-        const lg     = L.featureGroup().addTo(map);
-        const isBlue = ageMs >= DOT_RED_MS;
-        const entry  = { alert: syntheticAlert, layerGroup: lg, colorTimer: null, isBlue };
+        const lg = L.featureGroup().addTo(map);
 
-        drawAzakaLayer(entry, isBlue ? BLUE_COLOR : RED_COLOR);
-
-        if (!isBlue) {
-          const remaining = DOT_RED_MS - ageMs;
-          entry.colorTimer = setTimeout(() => {
-            const e = azakaEntries.get(id);
-            if (e && !e.isBlue) { e.isBlue = true; drawAzakaLayer(e, BLUE_COLOR); }
-          }, remaining);
+        if (isHatara(syntheticAlert)) {
+          // Pre-warning from history → mustard polygon
+          if (!hataraEntry) {
+            hataraEntry = { alert: syntheticAlert, layerGroup: lg };
+            drawHataraLayer(hataraEntry);
+          }
+        } else {
+          const isBlue = ageMs >= DOT_RED_MS;
+          const entry  = { alert: syntheticAlert, layerGroup: lg, colorTimer: null, isBlue };
+          drawAzakaLayer(entry, isBlue ? BLUE_COLOR : RED_COLOR);
+          if (!isBlue) {
+            const remaining = DOT_RED_MS - ageMs;
+            entry.colorTimer = setTimeout(() => {
+              const e = azakaEntries.get(id);
+              if (e && !e.isBlue) { e.isBlue = true; drawAzakaLayer(e, BLUE_COLOR); }
+            }, remaining);
+          }
+          azakaEntries.set(id, entry);
         }
-
-        azakaEntries.set(id, entry);
       }
 
       if (azakaEntries.size > 0) {
