@@ -357,7 +357,7 @@
     const t = alert.title || '';
     const d = alert.desc  || '';
     if (t.startsWith('התרעה')) return true;
-    if (t.includes('בדקות הקרובות')) return true;
+    if (t.includes('בדקות')) return true;   // oref uses cat=10 + "בדקות" in title for pre-warnings
     if (d.includes('בדקות הקרובות')) return true;
     return false;
   }
@@ -508,8 +508,10 @@
       return;
     }
 
-    const ended  = alert.cat === '10';
-    const hatara = !ended && isHatara(alert);
+    // cat=10 is used for BOTH "event ended" AND "pre-warning" (התרעה).
+    // Distinguish by title: pre-warnings contain "בדקות", ended events don't.
+    const hatara = isHatara(alert);
+    const ended  = alert.cat === '10' && !hatara;
     const label  = CAT_LABELS[alert.cat] || alert.title || 'התרעה';
     console.log('[oref updateUI] cat=', alert.cat, '| hatara=', hatara, '| title=', alert.title, '| desc=', alert.desc);
 
