@@ -511,6 +511,7 @@
     const ended  = alert.cat === '10';
     const hatara = !ended && isHatara(alert);
     const label  = CAT_LABELS[alert.cat] || alert.title || 'התרעה';
+    console.log('[oref updateUI] cat=', alert.cat, '| hatara=', hatara, '| title=', alert.title, '| desc=', alert.desc);
 
     dot.className      = ended ? 'ended' : 'active';
     text.className     = ended ? '' : 'active';
@@ -620,6 +621,7 @@
         try {
           const rv = await fetch('/api/realtime');
           const vercel = await rv.json();
+          console.log('[oref supplement]', JSON.stringify(vercel));
           // Ignore cat=10 (ended) from this path — stale history endings
           // must not clear the map; only a live CF Worker cat=10 should do that.
           if (vercel.alert && vercel.alert.cat !== '10') return vercel;
