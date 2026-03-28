@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 
 // Routes where the active member should be carried as ?member=ID
-const MEMBER_SENSITIVE = new Set(['', 'log', 'history', 'achievements']);
+const MEMBER_SENSITIVE = new Set(['', 'log', 'history', 'achievements', 'stats']);
 
 export default function BottomNav() {
   const location = useLocation();
@@ -16,8 +16,9 @@ export default function BottomNav() {
     { path: '',             icon: '🏠', label: 'בית',       endMatch: true  },
     { path: 'log',          icon: '✅', label: 'תיעוד',     endMatch: false },
     { path: 'history',      icon: '📜', label: 'היסטוריה', endMatch: false },
-    { path: 'achievements', icon: '🏆', label: 'הישגים',   endMatch: false },
-    { path: 'admin',        icon: '⚙️', label: 'הגדרות',   endMatch: false },
+    { path: 'achievements', icon: '🏆', label: 'הישגים',      endMatch: false },
+    { path: 'stats',        icon: '📊', label: 'סטטיסטיקות', endMatch: false },
+    { path: 'admin',        icon: '⚙️', label: 'הגדרות',      endMatch: false },
   ];
 
   // PRIMARY: read ?member from the current page URL — available immediately on every render,

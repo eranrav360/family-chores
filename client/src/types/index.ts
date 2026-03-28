@@ -86,6 +86,16 @@ export interface LogChoreResponse {
   newAchievements: string[];
 }
 
+export interface MemberStats {
+  totalChores: number;
+  totalPoints: number;
+  mostCommonChore: { name: string; count: number } | null;
+  busiestDay: { day: string; count: number } | null;
+  uniqueChores: number;
+  byDifficulty: { easy: number; medium: number; hard: number };
+  bestWeek: { week_key: string; points: number } | null;
+}
+
 export type AchievementType = 'weekly_goal' | 'monthly_goal' | 'hard_worker';
 
 export const ACHIEVEMENT_META: Record<AchievementType, { label: string; emoji: string; desc: string }> = {

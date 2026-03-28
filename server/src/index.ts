@@ -9,6 +9,7 @@ import logRoutes from './routes/logs';
 import goalRoutes from './routes/goals';
 import achievementRoutes from './routes/achievements';
 import adminRoutes from './routes/admin';
+import statsRoutes from './routes/stats';
 import familiesRoutes from './routes/families';
 import superadminRoutes from './routes/superadmin';
 import { familyMiddleware } from './middleware/family';
@@ -41,6 +42,7 @@ familyScopedRouter.use('/logs',         logRoutes);
 familyScopedRouter.use('/goals',        goalRoutes);
 familyScopedRouter.use('/achievements', achievementRoutes);
 familyScopedRouter.use('/admin',        adminRoutes);
+familyScopedRouter.use('/stats',        statsRoutes);
 
 app.use('/api/f/:familyCode', familyScopedRouter);
 

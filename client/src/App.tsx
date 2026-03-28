@@ -11,6 +11,7 @@ import LogChoreScreen from './components/LogChore/LogChoreScreen';
 import HistoryScreen from './components/History/HistoryScreen';
 import AchievementsScreen from './components/Achievements/AchievementsScreen';
 import AdminScreen from './components/Admin/AdminScreen';
+import StatsScreen from './components/Stats/StatsScreen';
 import SuperAdminScreen from './components/SuperAdmin/SuperAdminScreen';
 
 const WAKE_MESSAGES = [
@@ -127,6 +128,7 @@ function FamilyLoader() {
         <Route path="log"          element={<LogChoreScreen />} />
         <Route path="history"      element={<HistoryScreen />} />
         <Route path="achievements" element={<AchievementsScreen />} />
+        <Route path="stats"        element={<StatsScreen />} />
         <Route path="admin"        element={<AdminScreen />} />
         <Route path="*"            element={<Navigate to="" replace />} />
       </Routes>

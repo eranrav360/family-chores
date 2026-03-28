@@ -7,6 +7,7 @@ import type {
   CurrentPeriods,
   Achievement,
   LogChoreResponse,
+  MemberStats,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -103,6 +104,10 @@ export const setReward = (familyCode: string, type: string, period_key: string, 
 // ── Achievements ──────────────────────────────────────────────────────────────
 export const getAchievements = (familyCode: string, member_id?: number) =>
   apiFetch<Achievement[]>(`${f(familyCode)}/achievements${member_id ? `?member_id=${member_id}` : ''}`);
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+export const getMemberStats = (familyCode: string, member_id: number, month: number, year: number) =>
+  apiFetch<MemberStats>(`${f(familyCode)}/stats?member_id=${member_id}&month=${month}&year=${year}`);
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const verifyPin = (familyCode: string, pin: string) =>

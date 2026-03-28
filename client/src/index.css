@@ -184,8 +184,8 @@ html, body {
 }
 .nav-tab.active { color: var(--primary); }
 .nav-tab:active { background: var(--primary-light); }
-.nav-tab-icon { font-size: 22px; line-height: 1; }
-.nav-tab-label { font-size: 10px; font-weight: 600; }
+.nav-tab-icon { font-size: 20px; line-height: 1; }
+.nav-tab-label { font-size: 9px; font-weight: 600; }
 
 /* ── Input ─────────────────────────────────────────────────── */
 .input {
