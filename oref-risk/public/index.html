@@ -560,10 +560,10 @@
 
     // Risk level
     let riskLabel, riskClass;
-    if (daysPct === 0) { riskLabel = 'None'; riskClass = 'risk-none'; }
-    else if (daysPct < 5) { riskLabel = 'Low'; riskClass = 'risk-low'; }
-    else if (daysPct < 20) { riskLabel = 'Medium'; riskClass = 'risk-medium'; }
-    else if (daysPct < 50) { riskLabel = 'High'; riskClass = 'risk-high'; }
+    if (daysPct < 15) { riskLabel = 'Very Low'; riskClass = 'risk-none'; }
+    else if (daysPct < 30) { riskLabel = 'Low'; riskClass = 'risk-low'; }
+    else if (daysPct < 50) { riskLabel = 'Moderate'; riskClass = 'risk-medium'; }
+    else if (daysPct < 75) { riskLabel = 'Higher'; riskClass = 'risk-high'; }
     else { riskLabel = 'Extreme'; riskClass = 'risk-extreme'; }
 
     document.getElementById('stat-risk-value').textContent = riskLabel;
