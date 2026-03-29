@@ -349,12 +349,34 @@ app.get('/api/debug-realtime', async (req, res) => {
     }).on('error', e => resolve({ error: e.message }));
   });
 
+  // Optional: test CF Worker fetch if cfWorker param provided
+  let cfWorkerTest = null;
+  const cfWorker = req.query.cfWorker;
+  if (cfWorker) {
+    try {
+      const url = cfWorker.replace(/\/$/, '') + '/history?mode=1';
+      const r = await fetch(url, { headers: { 'User-Agent': 'oref-risk/1.0' } });
+      const text = await r.text();
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { parsed = null; }
+      cfWorkerTest = {
+        httpStatus: r.status,
+        isArray: Array.isArray(parsed),
+        count: Array.isArray(parsed) ? parsed.length : null,
+        rawSlice: text.slice(0, 200),
+      };
+    } catch (e) {
+      cfWorkerTest = { error: e.message };
+    }
+  }
+
   res.json({
     serverTime: new Date().toISOString(),
     israelOffset: offset,
     direct: rawDirect,
     tzevaadom: rawTzevaadom,
     history: rawHistory,
+    cfWorkerTest,
   });
 });
 
