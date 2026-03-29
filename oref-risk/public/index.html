@@ -23,6 +23,43 @@
       gap: 12px;
     }
 
+    #settings-btn {
+      margin-left: auto;
+      background: none;
+      border: 1px solid #3a3d4a;
+      color: #888;
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #settings-btn:hover { color: #aaa; background: #1e2130; }
+
+    #settings-dialog {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); z-index: 999;
+      align-items: center; justify-content: center;
+    }
+    #settings-dialog.open { display: flex; }
+    #settings-box {
+      background: #1a1d27; border: 1px solid #3a3d4a; border-radius: 12px;
+      padding: 24px; width: 420px; max-width: 95vw;
+    }
+    #settings-box h2 { font-size: 14px; margin-bottom: 14px; color: #ddd; }
+    #settings-box p  { font-size: 12px; color: #888; line-height: 1.55; margin-bottom: 14px; }
+    #settings-box input[type=url] {
+      width: 100%; background: #0f1117; border: 1px solid #3a3d4a;
+      border-radius: 8px; color: #e0e0e0; padding: 9px 12px;
+      font-size: 13px; margin-bottom: 10px; outline: none;
+    }
+    .settings-btns { display: flex; gap: 8px; justify-content: flex-end; }
+    .settings-btns button {
+      border: 1px solid #3a3d4a; background: #1e2130; color: #ccc;
+      border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+    }
+    .settings-btns button:hover { background: #2a2d3a; }
+    #cf-save-btn { background: #1a3050 !important; color: #4a9eff !important; }
+
     header .logo { font-size: 24px; }
     header h1 { font-size: 18px; font-weight: 600; color: #fff; }
     header p { font-size: 12px; color: #888; margin-top: 2px; }
@@ -242,7 +279,21 @@
     <span id="live-dot"></span>
     <span id="live-label">Live Map</span>
   </button>
+  <button id="settings-btn" title="Settings">⚙</button>
 </header>
+
+<div id="settings-dialog">
+  <div id="settings-box">
+    <h2>⚙ Cloudflare Worker URL</h2>
+    <p>Vercel servers are geo-blocked by oref. Set your CF Worker URL so history data is fetched directly from your browser (Israeli IP → TLV PoP → oref accessible).</p>
+    <input id="cf-url-input" type="url" placeholder="https://oref-proxy.YOUR-NAME.workers.dev" />
+    <div class="settings-btns">
+      <button id="cf-clear-btn">Clear</button>
+      <button id="cf-cancel-btn">Cancel</button>
+      <button id="cf-save-btn">Save</button>
+    </div>
+  </div>
+</div>
 
 <div class="container">
   <div class="search-card">
@@ -402,7 +453,7 @@
     document.getElementById('no-results').style.display = 'none';
 
     try {
-      const cfWorker = localStorage.getItem('cfWorkerUrl');
+      const cfWorker = localStorage.getItem('orefCfWorkerUrl');
       let data;
 
       if (cfWorker) {
@@ -589,6 +640,24 @@
 
   pollRealtimeAlert();
   setInterval(pollRealtimeAlert, 5000);
+
+  // ── Settings dialog ────────────────────────────────────────────────────────
+  const CF_KEY = 'orefCfWorkerUrl';
+  const settingsDialog = document.getElementById('settings-dialog');
+  const cfUrlInput = document.getElementById('cf-url-input');
+
+  document.getElementById('settings-btn').addEventListener('click', () => {
+    cfUrlInput.value = localStorage.getItem(CF_KEY) || '';
+    settingsDialog.classList.add('open');
+  });
+  document.getElementById('cf-cancel-btn').addEventListener('click', () => settingsDialog.classList.remove('open'));
+  document.getElementById('cf-clear-btn').addEventListener('click', () => { localStorage.removeItem(CF_KEY); cfUrlInput.value = ''; settingsDialog.classList.remove('open'); });
+  document.getElementById('cf-save-btn').addEventListener('click', () => {
+    const v = cfUrlInput.value.trim();
+    if (v) localStorage.setItem(CF_KEY, v); else localStorage.removeItem(CF_KEY);
+    settingsDialog.classList.remove('open');
+  });
+  settingsDialog.addEventListener('click', e => { if (e.target === settingsDialog) settingsDialog.classList.remove('open'); });
 </script>
 </body>
 </html>
