@@ -539,6 +539,23 @@
       </div>
 
       <div class="section">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
+          <h3 style="margin-bottom:0">סיכון נצבר לפי שעה ביום:</h3>
+          <select id="travel-dow-select" class="mode-select" style="width:auto;padding:4px 10px;font-size:13px"
+                  onchange="renderDowHourChart(parseInt(this.value))">
+            <option value="0">ראשון</option>
+            <option value="1">שני</option>
+            <option value="2">שלישי</option>
+            <option value="3">רביעי</option>
+            <option value="4">חמישי</option>
+            <option value="5">שישי</option>
+            <option value="6">שבת</option>
+          </select>
+        </div>
+        <div class="hour-chart" id="travel-hour-dow-chart"></div>
+      </div>
+
+      <div class="section">
         <h3>פירוט לפי מיקום</h3>
         <div class="loc-compare" id="loc-compare"></div>
       </div>
@@ -1011,6 +1028,51 @@
     return sets.map((s, i) => dowCounts[i] ? (s.size / dowCounts[i]) * 100 : 0);
   }
 
+  // Module-level state for the day-specific hour chart (populated by renderTravelResults)
+  let _travelProbA_hd = null, _travelProbB_hd = null, _travelDurationMins = 0;
+
+  function hourDowProbabilities(alerts, totalDays) {
+    const dowCounts = Array(7).fill(0);
+    const today = new Date();
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      dowCounts[d.getDay()]++;
+    }
+    // sets[dow][hour] = Set of distinct alert dates
+    const sets = Array.from({length: 7}, () => Array.from({length: 24}, () => new Set()));
+    alerts.forEach(a => {
+      const dow = new Date(a.alertDate).getDay();
+      const hour = parseInt((a.time || '00:00:00').split(':')[0]);
+      sets[dow][hour].add(a.alertDate.substring(0, 10));
+    });
+    return sets.map((hourSets, dow) =>
+      hourSets.map(s => dowCounts[dow] ? (s.size / dowCounts[dow]) * 100 : 0)
+    );
+  }
+
+  function renderDowHourChart(dow) {
+    if (!_travelProbA_hd || !_travelProbB_hd) return;
+    const probA = _travelProbA_hd[dow];
+    const probB = _travelProbB_hd[dow];
+    const acc = Array.from({length: 24}, (_, h) =>
+      accumulatedRisk(h, _travelDurationMins, probA, probB));
+    const minC = Math.min(...acc);
+    const maxC = Math.max(...acc, 0.1);
+    const bestH = acc.indexOf(Math.min(...acc));
+    document.getElementById('travel-hour-dow-chart').innerHTML = acc.map((p, h) => {
+      const heightPct = (p / maxC * 100).toFixed(1);
+      const label = `${String(h).padStart(2, '0')}:00`;
+      const aMin = String(((h * 60 + _travelDurationMins) % (24 * 60)) % 60).padStart(2, '0');
+      const aHour = String(Math.floor((h * 60 + _travelDurationMins) / 60) % 24).padStart(2, '0');
+      const title = `יציאה ${label} — סיכון נצבר ${p.toFixed(1)}% · מגיע ב-${aHour}:${aMin}`;
+      const ring = h === bestH ? 'box-shadow:0 0 0 2px #fff4;' : '';
+      return `<div class="hour-wrap" title="${title}">
+        <div class="hour-bar" style="height:${heightPct}%;background:${relBarColor(p, minC, maxC)};${ring}"></div>
+        <div class="hour-label">${label}</div>
+      </div>`;
+    }).join('');
+  }
+
   async function fetchRouteInfo(fromCity, toCity) {
     const geocode = async (city) => {
       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&countrycodes=il&format=json&limit=1`;
@@ -1043,6 +1105,14 @@
     const probB_h = hourProbabilities(alertsB, totalDays);
     const accumulated_h = Array.from({length: 24}, (_, h) =>
       accumulatedRisk(h, durationMins || 0, probA_h, probB_h));
+
+    // Build 7×24 matrices for the day-specific chart and store for live dropdown updates
+    _travelProbA_hd = hourDowProbabilities(alertsA, totalDays);
+    _travelProbB_hd = hourDowProbabilities(alertsB, totalDays);
+    _travelDurationMins = durationMins || 0;
+    const todayDow = new Date().getDay();
+    document.getElementById('travel-dow-select').value = todayDow;
+    renderDowHourChart(todayDow);
 
     const probA_d = dowProbabilities(alertsA, totalDays);
     const probB_d = dowProbabilities(alertsB, totalDays);
