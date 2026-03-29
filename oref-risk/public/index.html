@@ -529,7 +529,7 @@
       </div>
 
       <div class="section">
-        <h3>סיכון משולב לפי שעה ביום</h3>
+        <h3>סיכון נצבר לפי שעת יציאה</h3>
         <div class="hour-chart" id="travel-hour-chart"></div>
       </div>
 
@@ -956,8 +956,17 @@
         return;
       }
 
-      status.textContent = `${alertsA.length} התרעות עבור ${from} · ${alertsB.length} התרעות עבור ${to} ב-${meta.period} האחרונים`;
-      renderTravelResults(alertsA, alertsB, totalDays, from, to, meta.period);
+      // Geocode and compute route distance/duration
+      let distKm = null, durationMinutes = null;
+      try {
+        status.textContent = `מחשב מסלול בין ${from} ל-${to}…`;
+        ({ distKm, durationMinutes } = await fetchRouteInfo(from, to));
+        status.textContent = `${alertsA.length} התרעות עבור ${from} · ${alertsB.length} התרעות עבור ${to} · ${distKm} ק״מ · ${durationMinutes} דק׳`;
+      } catch (geoErr) {
+        status.textContent = `${alertsA.length} התרעות עבור ${from} · ${alertsB.length} התרעות עבור ${to} (לא ניתן לחשב מסלול: ${geoErr.message})`;
+      }
+
+      renderTravelResults(alertsA, alertsB, totalDays, from, to, meta.period, durationMinutes, distKm);
     } catch (e) {
       status.textContent = `שגיאה: ${e.message}`;
     } finally {
@@ -1002,28 +1011,58 @@
     return sets.map((s, i) => dowCounts[i] ? (s.size / dowCounts[i]) * 100 : 0);
   }
 
-  function renderTravelResults(alertsA, alertsB, totalDays, from, to, period) {
+  async function fetchRouteInfo(fromCity, toCity) {
+    const geocode = async (city) => {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&countrycodes=il&format=json&limit=1`;
+      const r = await fetch(url, { headers: { 'Accept-Language': 'he', 'User-Agent': 'oref-risk/1.0' } });
+      const d = await r.json();
+      if (!d.length) throw new Error(`לא נמצא מיקום: ${city}`);
+      return { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) };
+    };
+    const [a, b] = await Promise.all([geocode(fromCity), geocode(toCity)]);
+    const R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLon = (b.lon - a.lon) * Math.PI / 180;
+    const hv = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    const distKm = 2 * R * Math.asin(Math.sqrt(hv)) * 1.3; // road factor
+    const durationMinutes = Math.round(distKm / 80 * 60);
+    return { distKm: Math.round(distKm), durationMinutes };
+  }
+
+  function accumulatedRisk(departureHour, durationMins, probA, probB) {
+    const N = Math.max(Math.ceil(durationMins / 10), 1);
+    let total = 0;
+    for (let i = 0; i < N; i++) {
+      const t = N > 1 ? i / (N - 1) : 0.5;
+      const currentHour = Math.floor((departureHour * 60 + i * 10) / 60) % 24;
+      total += (1 - t) * probA[currentHour] + t * probB[currentHour];
+    }
+    return total / N;
+  }
+
+  function renderTravelResults(alertsA, alertsB, totalDays, from, to, period, durationMins, distKm) {
     const probA_h = hourProbabilities(alertsA, totalDays);
     const probB_h = hourProbabilities(alertsB, totalDays);
-    const combined_h = probA_h.map((p, h) => p + probB_h[h]);
+    const accumulated_h = Array.from({length: 24}, (_, h) =>
+      accumulatedRisk(h, durationMins || 0, probA_h, probB_h));
 
     const probA_d = dowProbabilities(alertsA, totalDays);
     const probB_d = dowProbabilities(alertsB, totalDays);
     const combined_d = probA_d.map((p, i) => p + probB_d[i]);
 
-    // Best hour = lowest combined risk
-    const minH = Math.min(...combined_h);
-    const bestH = combined_h.indexOf(minH);
+    // Best hour = lowest accumulated risk
+    const minH = Math.min(...accumulated_h);
+    const bestH = accumulated_h.indexOf(minH);
 
     // Best DOW
     const minD = Math.min(...combined_d);
     const bestDow = combined_d.indexOf(minD);
 
     // Recommendation cards
-    const maxH = Math.max(...combined_h, 0.1);
     document.getElementById('rec-hour').textContent = hourLabel(bestH);
+    const arrMin = String(((bestH * 60 + (durationMins || 0)) % (24 * 60)) % 60).padStart(2, '0');
+    const arrHour = String(Math.floor((bestH * 60 + (durationMins || 0)) / 60) % 24).padStart(2, '0');
+    const tripInfo = distKm ? `${distKm} ק״מ · ${durationMins} דק׳ · ` : '';
     document.getElementById('rec-hour-sub').textContent =
-      `סיכון משולב: ${minH.toFixed(1)}% · תקופה: ${period}`;
+      `${tripInfo}סיכון נצבר: ${minH.toFixed(1)}% · הגעה: ${arrHour}:${arrMin}`;
 
     document.getElementById('rec-dow').textContent = DOW_NAMES[bestDow];
     document.getElementById('rec-dow-sub').textContent =
@@ -1034,12 +1073,14 @@
     document.getElementById('rec-day').className  = `recommendation${minD > 30 ? ' warn' : ''}`;
 
     // Hour chart
-    const minC = Math.min(...combined_h);
-    const maxC = Math.max(...combined_h, 0.1);
-    document.getElementById('travel-hour-chart').innerHTML = combined_h.map((p, h) => {
+    const minC = Math.min(...accumulated_h);
+    const maxC = Math.max(...accumulated_h, 0.1);
+    document.getElementById('travel-hour-chart').innerHTML = accumulated_h.map((p, h) => {
       const heightPct = (p / maxC * 100).toFixed(1);
-      const label = h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`;
-      const title = `${String(h).padStart(2,'0')}:00 — סיכון משולב ${p.toFixed(1)}% (${from}: ${probA_h[h].toFixed(1)}% + ${to}: ${probB_h[h].toFixed(1)}%)`;
+      const label = `${String(h).padStart(2,'0')}:00`;
+      const aMin = String(((h * 60 + (durationMins || 0)) % (24 * 60)) % 60).padStart(2, '0');
+      const aHour = String(Math.floor((h * 60 + (durationMins || 0)) / 60) % 24).padStart(2, '0');
+      const title = `יציאה ${label} — סיכון נצבר ${p.toFixed(1)}% · מגיע ב-${aHour}:${aMin}`;
       const ring = h === bestH ? 'box-shadow:0 0 0 2px #fff4;' : '';
       return `<div class="hour-wrap" title="${title}">
         <div class="hour-bar" style="height:${heightPct}%;background:${relBarColor(p, minC, maxC)};${ring}"></div>
