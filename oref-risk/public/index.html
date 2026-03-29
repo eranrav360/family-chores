@@ -1048,7 +1048,6 @@
     }).join('');
 
     // DOW chart
-    const minD = Math.min(...combined_d);
     const maxD = Math.max(...combined_d, 0.1);
     document.getElementById('dow-chart').innerHTML = combined_d.map((p, i) => {
       const heightPct = (p / maxD * 100).toFixed(1);
