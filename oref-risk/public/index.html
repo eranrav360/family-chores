@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Israel Alert Risk Analyzer</title>
+  <title>מנתח סיכוני התרעות</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -24,7 +24,7 @@
     }
 
     #settings-btn {
-      margin-left: auto;
+      margin-left: 0;
       background: none;
       border: 1px solid #3a3d4a;
       color: #888;
@@ -320,7 +320,7 @@
 
     /* Live alerts button */
     #live-btn {
-      margin-left: auto;
+      margin-inline-start: auto;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -362,118 +362,118 @@
 <header>
   <span class="logo">🚨</span>
   <div>
-    <h1>Israel Alert Risk Analyzer</h1>
-    <p>Based on IDF Home Front Command (פיקוד העורף) historical alert data</p>
+    <h1>מנתח סיכוני התרעות</h1>
+    <p>מבוסס על נתוני היסטוריית התרעות פיקוד העורף</p>
   </div>
-  <button id="live-btn" onclick="openAlertMap()" title="Live alert map">
+  <button id="live-btn" onclick="openAlertMap()" title="מפת התרעות חיה">
     <span id="live-dot"></span>
-    <span id="live-label">Live Map</span>
+    <span id="live-label">מפה חיה</span>
   </button>
-  <button id="settings-btn" title="Settings">⚙</button>
+  <button id="settings-btn" title="הגדרות">⚙</button>
 </header>
 
 <div id="settings-dialog">
   <div id="settings-box">
-    <h2>⚙ Cloudflare Worker URL</h2>
-    <p>Vercel servers are geo-blocked by oref. Set your CF Worker URL so history data is fetched directly from your browser (Israeli IP → TLV PoP → oref accessible).</p>
+    <h2>⚙ כתובת Cloudflare Worker</h2>
+    <p>שרתי Vercel חסומים על-ידי פיקוד העורף. הגדר את כתובת ה-CF Worker שלך כדי שהנתונים יישלפו ישירות מהדפדפן (IP ישראלי ← PoP ת״א ← אורף).</p>
     <input id="cf-url-input" type="url" placeholder="https://oref-proxy.YOUR-NAME.workers.dev" />
     <div class="settings-btns">
-      <button id="cf-clear-btn">Clear</button>
-      <button id="cf-cancel-btn">Cancel</button>
-      <button id="cf-save-btn">Save</button>
+      <button id="cf-clear-btn">נקה</button>
+      <button id="cf-cancel-btn">ביטול</button>
+      <button id="cf-save-btn">שמור</button>
     </div>
   </div>
 </div>
 
 <div class="container">
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('risk')">📍 Location Risk</button>
-    <button class="tab-btn" onclick="switchTab('travel')">🚗 Travel Planner</button>
+    <button class="tab-btn active" onclick="switchTab('risk')">📍 סיכון לפי מיקום</button>
+    <button class="tab-btn" onclick="switchTab('travel')">🚗 מתכנן נסיעות</button>
   </div>
 
   <!-- ── Location Risk tab ─────────────────────────────────────────────── -->
   <div id="tab-risk">
   <div class="search-card">
-    <h2>Search Location</h2>
+    <h2>חיפוש מיקום</h2>
     <div class="search-row">
       <div class="autocomplete-wrap">
-        <input type="text" id="location-input" placeholder="Type a location in Hebrew (e.g. תל אביב)" autocomplete="off" />
+        <input type="text" id="location-input" placeholder="הקלד מיקום (לדוגמה: תל אביב)" autocomplete="off" />
         <div id="autocomplete-list" style="display:none;"></div>
       </div>
       <select id="mode-select">
-        <option value="1">Last 24 hours</option>
-        <option value="2">Last 7 days</option>
-        <option value="4" selected>This month</option>
-        <option value="3">Last 30 days</option>
+        <option value="1">24 שעות אחרונות</option>
+        <option value="2">7 ימים אחרונים</option>
+        <option value="4" selected>החודש</option>
+        <option value="3">30 ימים אחרונים</option>
       </select>
-      <button class="btn" id="search-btn" onclick="runSearch()">Analyze</button>
+      <button class="btn" id="search-btn" onclick="runSearch()">נתח</button>
     </div>
-    <div id="status">Enter a location to get started, or leave blank for all of Israel</div>
+    <div id="status">הזן מיקום לניתוח, או השאר ריק עבור כל ישראל</div>
   </div>
 
   <div id="no-results">
     <div class="icon">📍</div>
-    <p>No alerts found for this location in the selected period.</p>
+    <p>לא נמצאו התרעות עבור מיקום זה בתקופה הנבחרת.</p>
   </div>
 
   <div class="results" id="results">
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="label">Total Alerts</div>
+        <div class="label">סך התרעות</div>
         <div class="value" id="stat-total">—</div>
         <div class="sub" id="stat-period">—</div>
       </div>
       <div class="stat-card">
-        <div class="label">Avg per Day</div>
+        <div class="label">ממוצע יומי</div>
         <div class="value" id="stat-per-day">—</div>
-        <div class="sub">alerts / day</div>
+        <div class="sub">התרעות ליום</div>
       </div>
       <div class="stat-card">
-        <div class="label">Days with Alerts</div>
+        <div class="label">ימים עם התרעות</div>
         <div class="value" id="stat-days-pct">—</div>
         <div class="sub" id="stat-days-sub">—</div>
       </div>
       <div class="stat-card">
-        <div class="label">Risk Level</div>
+        <div class="label">רמת סיכון</div>
         <div class="value" id="stat-risk-value" style="font-size:20px; margin-top:4px;">—</div>
         <div id="stat-risk-badge"></div>
       </div>
       <div class="stat-card">
-        <div class="label">Peak Hour</div>
+        <div class="label">שעת שיא</div>
         <div class="value" id="stat-peak-hour" style="font-size:22px; margin-top:4px;">—</div>
         <div class="sub" id="stat-peak-prob">—</div>
       </div>
     </div>
 
     <div class="section">
-      <h3>Alert Probability by Hour of Day</h3>
+      <h3>הסתברות התרעה לפי שעה ביום</h3>
       <div class="hour-chart" id="hour-chart"></div>
       <div class="hour-x-labels" id="hour-x-labels"></div>
     </div>
 
     <div class="section" id="heatmap-section">
-      <h3>Alert Activity Heatmap (by week)</h3>
+      <h3>מפת חום פעילות התרעות (לפי שבוע)</h3>
       <div class="heatmap-wrap">
         <div class="heatmap" id="heatmap"></div>
       </div>
       <div class="legend">
-        Less
+        פחות
         <div class="legend-cell" style="background:#1e2130"></div>
         <div class="legend-cell" style="background:#7f1d1d"></div>
         <div class="legend-cell" style="background:#b91c1c"></div>
         <div class="legend-cell" style="background:#dc2626"></div>
         <div class="legend-cell" style="background:#ef4444"></div>
-        More
+        יותר
       </div>
     </div>
 
     <div class="section" id="top-locations-section">
-      <h3>Top Locations by Alert Count</h3>
+      <h3>מיקומים עם הכי הרבה התרעות</h3>
       <div class="bar-chart" id="top-locations"></div>
     </div>
 
     <div class="section">
-      <h3>Recent Alerts</h3>
+      <h3>התרעות אחרונות</h3>
       <div class="timeline" id="timeline"></div>
     </div>
   </div>
@@ -482,30 +482,30 @@
   <!-- ── Travel Planner tab ─────────────────────────────────────────────── -->
   <div id="tab-travel" style="display:none">
     <div class="search-card">
-      <h2>Travel Planner</h2>
+      <h2>מתכנן נסיעות</h2>
       <div class="route-inputs">
         <div class="autocomplete-wrap">
-          <input type="text" id="from-input" placeholder="From — location A (Hebrew)" autocomplete="off" />
+          <input type="text" id="from-input" placeholder="מ — מיקום מוצא" autocomplete="off" />
           <div id="from-autocomplete" class="autocomplete-dropdown" style="display:none;"></div>
         </div>
-        <div class="route-arrow">→</div>
+        <div class="route-arrow">←</div>
         <div class="autocomplete-wrap">
-          <input type="text" id="to-input" placeholder="To — location B (Hebrew)" autocomplete="off" />
+          <input type="text" id="to-input" placeholder="ל — מיקום יעד" autocomplete="off" />
           <div id="to-autocomplete" class="autocomplete-dropdown" style="display:none;"></div>
         </div>
         <select id="travel-mode-select">
-          <option value="2">Last 7 days</option>
-          <option value="4" selected>This month</option>
-          <option value="3">Last 30 days</option>
+          <option value="2">7 ימים אחרונים</option>
+          <option value="4" selected>החודש</option>
+          <option value="3">30 ימים אחרונים</option>
         </select>
-        <button class="btn" id="travel-btn" onclick="runTravelSearch()">Find Best Time</button>
+        <button class="btn" id="travel-btn" onclick="runTravelSearch()">מצא זמן אופטימלי</button>
       </div>
-      <div id="travel-status">Enter both locations to find the safest travel window</div>
+      <div id="travel-status">הזן את שני המיקומים למציאת זמן הנסיעה הבטוח ביותר</div>
     </div>
 
     <div id="travel-no-results" style="display:none; text-align:center; padding:40px; color:#888;">
       <div style="font-size:48px;margin-bottom:12px;">🗺️</div>
-      <p>No alert data found for one or both locations in the selected period.</p>
+      <p>לא נמצאו נתוני התרעות לאחד או לשני המיקומים בתקופה הנבחרת.</p>
     </div>
 
     <div id="travel-results" style="display:none">
@@ -513,7 +513,7 @@
         <div class="recommendation" id="rec-time">
           <div class="rec-icon">🕐</div>
           <div class="rec-body">
-            <div class="rec-title">Best Hour to Travel</div>
+            <div class="rec-title">השעה המומלצת לנסיעה</div>
             <div class="rec-value" id="rec-hour">—</div>
             <div class="rec-sub" id="rec-hour-sub">—</div>
           </div>
@@ -521,7 +521,7 @@
         <div class="recommendation" id="rec-day">
           <div class="rec-icon">📅</div>
           <div class="rec-body">
-            <div class="rec-title">Safest Day of Week</div>
+            <div class="rec-title">היום הבטוח ביותר בשבוע</div>
             <div class="rec-value" id="rec-dow">—</div>
             <div class="rec-sub" id="rec-dow-sub">—</div>
           </div>
@@ -529,17 +529,17 @@
       </div>
 
       <div class="section">
-        <h3>Combined Alert Risk by Hour of Day</h3>
+        <h3>סיכון משולב לפי שעה ביום</h3>
         <div class="hour-chart" id="travel-hour-chart"></div>
       </div>
 
       <div class="section">
-        <h3>Combined Alert Risk by Day of Week</h3>
+        <h3>סיכון משולב לפי יום בשבוע</h3>
         <div class="dow-chart" id="dow-chart"></div>
       </div>
 
       <div class="section">
-        <h3>Individual Location Breakdown</h3>
+        <h3>פירוט לפי מיקום</h3>
         <div class="loc-compare" id="loc-compare"></div>
       </div>
     </div>
@@ -595,12 +595,12 @@
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       monthStart.setHours(0, 0, 0, 0);
       attackAlerts = attackAlerts.filter(a => new Date(a.alertDate) >= monthStart);
-      const monthName = now.toLocaleString('en-US', { month: 'long' });
+      const monthName = now.toLocaleString('he-IL', { month: 'long' });
       periodLabel = `${monthName} ${now.getFullYear()}`;
       periodDays = now.getDate();
     } else {
       const apiMode = Math.min(Math.max(modeNum, 1), 3);
-      periodLabel = ['24 hours', '7 days', '30 days'][apiMode - 1];
+      periodLabel = ['24 שעות', '7 ימים', '30 ימים'][apiMode - 1];
       periodDays = [1, 7, 30][apiMode - 1];
     }
 
@@ -622,8 +622,8 @@
     const status = document.getElementById('status');
 
     btn.disabled = true;
-    btn.textContent = 'Loading…';
-    status.textContent = 'Fetching alerts…';
+    btn.textContent = 'טוען…';
+    status.textContent = 'מוריד נתוני התרעות…';
     document.getElementById('results').style.display = 'none';
     document.getElementById('no-results').style.display = 'none';
 
@@ -638,7 +638,7 @@
         if (location) url += `&city=${encodeURIComponent(location)}`;
         const r = await fetch(url);
         const raw = await r.json();
-        if (!Array.isArray(raw)) throw new Error(raw.error || 'Unexpected response from CF Worker');
+        if (!Array.isArray(raw)) throw new Error(raw.error || 'תגובה לא צפויה מה-CF Worker');
         data = processAlerts(raw, modeNum);
       } else {
         // Fallback: Vercel server (works when running locally or on Israeli-IP host)
@@ -652,10 +652,10 @@
       currentData = data;
       renderResults(data, location);
     } catch (e) {
-      status.textContent = `Error: ${e.message}`;
+      status.textContent = `שגיאה: ${e.message}`;
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Analyze';
+      btn.textContent = 'נתח';
     }
   }
 
@@ -666,14 +666,14 @@
 
     if (!alerts.length) {
       status.textContent = location
-        ? `No alerts found for "${location}" in the last ${data.period}`
-        : `No alerts found in the last ${data.period}`;
+        ? `לא נמצאו התרעות עבור "${location}" ב-${data.period} האחרונים`
+        : `לא נמצאו התרעות ב-${data.period} האחרונים`;
       document.getElementById('no-results').style.display = 'block';
       return;
     }
 
-    const capNote = data.cappedAt3000 ? ' (capped at 3,000 — filter by city for full data)' : '';
-    status.textContent = `Found ${alerts.length.toLocaleString()} alerts${location ? ` for "${location}"` : ' across Israel'} in the last ${data.period}${capNote}`;
+    const capNote = data.cappedAt3000 ? ' (מוגבל ל-3,000 — סנן לפי עיר לנתונים מלאים)' : '';
+    status.textContent = `נמצאו ${alerts.length.toLocaleString()} התרעות${location ? ` עבור "${location}"` : ' בכל הארץ'} ב-${data.period} האחרונים${capNote}`;
     const perDay = (alerts.length / totalDays).toFixed(2);
 
     const alertsByDate = {};
@@ -685,22 +685,22 @@
     const daysPct = Math.round((daysWithAlerts / totalDays) * 100);
 
     document.getElementById('stat-total').textContent = alerts.length.toLocaleString();
-    document.getElementById('stat-period').textContent = `last ${data.period}`;
+    document.getElementById('stat-period').textContent = `${data.period} האחרונים`;
     document.getElementById('stat-per-day').textContent = perDay;
     document.getElementById('stat-days-pct').textContent = daysPct + '%';
-    document.getElementById('stat-days-sub').textContent = `${daysWithAlerts} of ${totalDays} days`;
+    document.getElementById('stat-days-sub').textContent = `${daysWithAlerts} מתוך ${totalDays} ימים`;
 
     // Risk level
     let riskLabel, riskClass;
-    if (daysPct < 15) { riskLabel = 'Very Low'; riskClass = 'risk-none'; }
-    else if (daysPct < 30) { riskLabel = 'Low'; riskClass = 'risk-low'; }
-    else if (daysPct < 50) { riskLabel = 'Moderate'; riskClass = 'risk-medium'; }
-    else if (daysPct < 75) { riskLabel = 'Higher'; riskClass = 'risk-high'; }
-    else { riskLabel = 'Extreme'; riskClass = 'risk-extreme'; }
+    if (daysPct < 15) { riskLabel = 'נמוך מאוד'; riskClass = 'risk-none'; }
+    else if (daysPct < 30) { riskLabel = 'נמוך'; riskClass = 'risk-low'; }
+    else if (daysPct < 50) { riskLabel = 'בינוני'; riskClass = 'risk-medium'; }
+    else if (daysPct < 75) { riskLabel = 'גבוה'; riskClass = 'risk-high'; }
+    else { riskLabel = 'קיצוני'; riskClass = 'risk-extreme'; }
 
     document.getElementById('stat-risk-value').textContent = riskLabel;
     document.getElementById('stat-risk-badge').innerHTML =
-      `<span class="risk-badge ${riskClass}">${daysPct}% of days</span>`;
+      `<span class="risk-badge ${riskClass}">${daysPct}% מהימים</span>`;
 
     // --- Hour chart ---
     renderHourChart(alerts, totalDays);
@@ -736,7 +736,7 @@
         <div class="t-date">${formatDate(a.alertDate)}</div>
         <div>
           <div class="t-loc">${a.data}</div>
-          <div class="t-cat">${a.category === 1 ? '🚀 Rockets/Missiles' : '✈️ UAV/Drone'}</div>
+          <div class="t-cat">${a.category === 1 ? '🚀 רקטות/טילים' : '✈️ כלי טיס'}</div>
         </div>
       </div>
     `).join('');
@@ -763,7 +763,7 @@
     document.getElementById('hour-chart').innerHTML = probs.map((p, h) => {
       const heightPct = (p / maxProb * 100).toFixed(1);
       const label = h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`;
-      const title = `${String(h).padStart(2,'0')}:00 — ${p.toFixed(1)}% of days had an alert`;
+      const title = `${String(h).padStart(2,'0')}:00 — ${p.toFixed(1)}% מהימים הייתה התרעה`;
       return `<div class="hour-wrap" title="${title}">
         <div class="hour-bar" style="height:${heightPct}%;background:${barColor(p)}"></div>
         <div class="hour-label">${label}</div>
@@ -772,7 +772,7 @@
 
     const peakLabel = peakHour === 0 ? '12:00 AM' : peakHour < 12 ? `${peakHour}:00 AM` : peakHour === 12 ? '12:00 PM' : `${peakHour - 12}:00 PM`;
     document.getElementById('stat-peak-hour').textContent = peakLabel;
-    document.getElementById('stat-peak-prob').textContent = `${probs[peakHour].toFixed(0)}% of days`;
+    document.getElementById('stat-peak-prob').textContent = `${probs[peakHour].toFixed(0)}% מהימים`;
   }
 
   function renderHeatmap(alertsByDate, totalDays) {
@@ -816,7 +816,7 @@
 
   function formatDate(isoStr) {
     const d = new Date(isoStr);
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('he-IL', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
   // ── Live alerts polling ────────────────────────────────────────────────────
@@ -842,7 +842,7 @@
         label.textContent = `התרעה! (${alert.data.length})`;
       } else {
         btn.classList.remove('active');
-        label.textContent = 'Live Map';
+        label.textContent = 'מפה חיה';
       }
     } catch { /* ignore */ }
   }
@@ -934,11 +934,11 @@
     const btn    = document.getElementById('travel-btn');
     const status = document.getElementById('travel-status');
 
-    if (!from || !to) { status.textContent = 'Please enter both a departure and destination location.'; return; }
+    if (!from || !to) { status.textContent = 'יש להזין גם מיקום מוצא וגם יעד.'; return; }
 
     btn.disabled = true;
-    btn.textContent = 'Loading…';
-    status.textContent = `Fetching alert history for ${from} and ${to}…`;
+    btn.textContent = 'טוען…';
+    status.textContent = `מוריד היסטוריית התרעות עבור ${from} ו-${to}…`;
     document.getElementById('travel-results').style.display = 'none';
     document.getElementById('travel-no-results').style.display = 'none';
 
@@ -953,25 +953,26 @@
       const totalDays = meta.periodDays;
 
       if (!alertsA.length && !alertsB.length) {
-        status.textContent = `No alerts found for either location in the last ${meta.period}.`;
+        status.textContent = `לא נמצאו התרעות באף אחד מהמיקומים ב-${meta.period} האחרונים.`;
         document.getElementById('travel-no-results').style.display = 'block';
         return;
       }
 
-      status.textContent = `${alertsA.length} alerts for ${from} · ${alertsB.length} alerts for ${to} in the last ${meta.period}`;
+      status.textContent = `${alertsA.length} התרעות עבור ${from} · ${alertsB.length} התרעות עבור ${to} ב-${meta.period} האחרונים`;
       renderTravelResults(alertsA, alertsB, totalDays, from, to, meta.period);
     } catch (e) {
-      status.textContent = `Error: ${e.message}`;
+      status.textContent = `שגיאה: ${e.message}`;
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Find Best Time';
+      btn.textContent = 'מצא זמן אופטימלי';
     }
   }
 
   function hourLabel(h) {
-    return h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h - 12}:00 PM`;
+    return `${String(h).padStart(2, '0')}:00`;
   }
-  const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const DOW_NAMES = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+  const DOW_SHORT = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
   const barColor  = p => p > 40 ? '#ef4444' : p > 20 ? '#dc2626' : p > 10 ? '#b91c1c' : p > 3 ? '#7f1d1d' : '#2a2030';
   const barColorGood = p => p < 5 ? '#4ade80' : p < 15 ? '#a3e635' : p < 30 ? '#facc15' : p < 50 ? '#fb923c' : '#ef4444';
 
@@ -1019,11 +1020,11 @@
     const maxH = Math.max(...combined_h, 0.1);
     document.getElementById('rec-hour').textContent = hourLabel(bestH);
     document.getElementById('rec-hour-sub').textContent =
-      `Combined risk: ${minH.toFixed(1)}% · Period: ${period}`;
+      `סיכון משולב: ${minH.toFixed(1)}% · תקופה: ${period}`;
 
     document.getElementById('rec-dow').textContent = DOW_NAMES[bestDow];
     document.getElementById('rec-dow-sub').textContent =
-      `Combined risk: ${minD.toFixed(1)}% · of days with an alert`;
+      `סיכון משולב: ${minD.toFixed(1)}% מהימים`;
 
     // Style recommendation cards by risk level
     document.getElementById('rec-time').className = `recommendation${minH > 30 ? ' warn' : ''}`;
@@ -1034,7 +1035,7 @@
     document.getElementById('travel-hour-chart').innerHTML = combined_h.map((p, h) => {
       const heightPct = (p / maxC * 100).toFixed(1);
       const label = h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`;
-      const title = `${String(h).padStart(2,'0')}:00 — combined risk ${p.toFixed(1)}% (${from}: ${probA_h[h].toFixed(1)}% + ${to}: ${probB_h[h].toFixed(1)}%)`;
+      const title = `${String(h).padStart(2,'0')}:00 — סיכון משולב ${p.toFixed(1)}% (${from}: ${probA_h[h].toFixed(1)}% + ${to}: ${probB_h[h].toFixed(1)}%)`;
       const highlight = h === bestH ? 'box-shadow:0 0 0 2px #4ade80;' : '';
       return `<div class="hour-wrap" title="${title}">
         <div class="hour-bar" style="height:${heightPct}%;background:${h === bestH ? '#4ade80' : barColor(p)};${highlight}"></div>
@@ -1046,11 +1047,11 @@
     const maxD = Math.max(...combined_d, 0.1);
     document.getElementById('dow-chart').innerHTML = combined_d.map((p, i) => {
       const heightPct = (p / maxD * 100).toFixed(1);
-      const title = `${DOW_NAMES[i]} — combined risk ${p.toFixed(1)}%`;
+      const title = `${DOW_NAMES[i]} — סיכון משולב ${p.toFixed(1)}%`;
       return `<div class="dow-wrap" title="${title}">
         <div class="dow-pct">${p.toFixed(0)}%</div>
         <div class="dow-bar" style="height:${heightPct}%;background:${i === bestDow ? '#4ade80' : barColor(p)}"></div>
-        <div class="dow-label">${DOW_NAMES[i].substring(0, 3)}</div>
+        <div class="dow-label">${DOW_SHORT[i]}</div>
       </div>`;
     }).join('');
 
@@ -1061,12 +1062,12 @@
       <div class="stat-card">
         <div class="label">${from}</div>
         <div class="value">${alertsA.length}</div>
-        <div class="sub">${avgA.toFixed(2)} alerts/day · ${period}</div>
+        <div class="sub">${avgA.toFixed(2)} התרעות ליום · ${period}</div>
       </div>
       <div class="stat-card">
         <div class="label">${to}</div>
         <div class="value">${alertsB.length}</div>
-        <div class="sub">${avgB.toFixed(2)} alerts/day · ${period}</div>
+        <div class="sub">${avgB.toFixed(2)} התרעות ליום · ${period}</div>
       </div>`;
 
     document.getElementById('travel-results').style.display = 'block';
