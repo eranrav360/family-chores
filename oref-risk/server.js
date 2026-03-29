@@ -112,14 +112,20 @@ function fetchCities() {
 }
 
 // API: get full city registry (not limited to recent alerts)
-// Falls back to unique cities from 30-day history if the cities API returns nothing
+// Primary: GitHub-hosted cities.json (not geo-blocked, ~1350 cities)
+// Fallback: oref GetCities.aspx (requires Israeli IP)
 app.get('/api/locations', async (req, res) => {
   try {
-    let locations = await fetchCities();
+    // Use the already-cached GitHub cities data (same source as the map geo data)
+    await ensureCityPolygonData();
+    let locations = (citiesGeoCache || [])
+      .map(c => c.name)
+      .filter(n => n && n !== 'בחר הכל')
+      .sort();
+
     if (locations.length === 0) {
-      // Fallback: extract unique city names from 30-day history
-      const allAlerts = await fetchAlerts(3, null);
-      locations = [...new Set(allAlerts.map(a => a.data))].filter(Boolean).sort();
+      // Last-resort fallback: oref cities registry
+      locations = await fetchCities();
     }
     res.json({ locations });
   } catch (e) {
