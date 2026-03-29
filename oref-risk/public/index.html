@@ -358,9 +358,40 @@
     autocompleteList.style.display = 'none';
   }
 
+  // Process raw oref history records into the shape renderResults() expects.
+  // Mirrors the logic in server.js /api/history.
+  function processAlerts(allAlerts, modeNum) {
+    let attackAlerts = allAlerts.filter(a => a.category === 1 || a.category === 6);
+
+    let periodLabel, periodDays;
+    if (modeNum === 4) {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      monthStart.setHours(0, 0, 0, 0);
+      attackAlerts = attackAlerts.filter(a => new Date(a.alertDate) >= monthStart);
+      const monthName = now.toLocaleString('en-US', { month: 'long' });
+      periodLabel = `${monthName} ${now.getFullYear()}`;
+      periodDays = now.getDate();
+    } else {
+      const apiMode = Math.min(Math.max(modeNum, 1), 3);
+      periodLabel = ['24 hours', '7 days', '30 days'][apiMode - 1];
+      periodDays = [1, 7, 30][apiMode - 1];
+    }
+
+    return {
+      total: attackAlerts.length,
+      alerts: attackAlerts,
+      allLocations: [...new Set(attackAlerts.map(a => a.data))].sort(),
+      period: periodLabel,
+      periodDays,
+      cappedAt3000: allAlerts.length >= 3000,
+    };
+  }
+
   async function runSearch() {
     const location = locationInput.value.trim();
     const mode = document.getElementById('mode-select').value;
+    const modeNum = parseInt(mode) || 3;
     const btn = document.getElementById('search-btn');
     const status = document.getElementById('status');
 
@@ -371,15 +402,27 @@
     document.getElementById('no-results').style.display = 'none';
 
     try {
-      const params = new URLSearchParams({ mode });
-      if (location) params.set('location', location);
       const cfWorker = localStorage.getItem('cfWorkerUrl');
-      if (cfWorker) params.set('cfWorker', cfWorker);
+      let data;
 
-      const r = await fetch(`/api/history?${params}`);
-      const data = await r.json();
+      if (cfWorker) {
+        // Fetch directly from CF Worker (runs from Israeli IP via TLV PoP)
+        const apiMode = modeNum === 4 ? 3 : Math.min(Math.max(modeNum, 1), 3);
+        let url = cfWorker.replace(/\/$/, '') + `/history?mode=${apiMode}`;
+        if (location) url += `&city=${encodeURIComponent(location)}`;
+        const r = await fetch(url);
+        const raw = await r.json();
+        if (!Array.isArray(raw)) throw new Error(raw.error || 'Unexpected response from CF Worker');
+        data = processAlerts(raw, modeNum);
+      } else {
+        // Fallback: Vercel server (works when running locally or on Israeli-IP host)
+        const params = new URLSearchParams({ mode });
+        if (location) params.set('location', location);
+        const r = await fetch(`/api/history?${params}`);
+        data = await r.json();
+        if (data.error) throw new Error(data.error);
+      }
 
-      if (data.error) throw new Error(data.error);
       currentData = data;
       renderResults(data, location);
     } catch (e) {
