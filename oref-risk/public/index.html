@@ -755,17 +755,15 @@
 
     const probs = hourDaySets.map(s => (s.size / totalDays) * 100);
     const maxProb = Math.max(...probs, 0.1);
+    const minProb = Math.min(...probs);
     const peakHour = probs.indexOf(Math.max(...probs));
-
-    const barColor = p =>
-      p > 40 ? '#ef4444' : p > 20 ? '#dc2626' : p > 10 ? '#b91c1c' : p > 3 ? '#7f1d1d' : '#3a2030';
 
     document.getElementById('hour-chart').innerHTML = probs.map((p, h) => {
       const heightPct = (p / maxProb * 100).toFixed(1);
       const label = h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`;
       const title = `${String(h).padStart(2,'0')}:00 — ${p.toFixed(1)}% מהימים הייתה התרעה`;
       return `<div class="hour-wrap" title="${title}">
-        <div class="hour-bar" style="height:${heightPct}%;background:${barColor(p)}"></div>
+        <div class="hour-bar" style="height:${heightPct}%;background:${relBarColor(p, minProb, maxProb)}"></div>
         <div class="hour-label">${label}</div>
       </div>`;
     }).join('');
@@ -973,8 +971,13 @@
   }
   const DOW_NAMES = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
   const DOW_SHORT = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
-  const barColor  = p => p > 40 ? '#ef4444' : p > 20 ? '#dc2626' : p > 10 ? '#b91c1c' : p > 3 ? '#7f1d1d' : '#2a2030';
-  const barColorGood = p => p < 5 ? '#4ade80' : p < 15 ? '#a3e635' : p < 30 ? '#facc15' : p < 50 ? '#fb923c' : '#ef4444';
+  // Maps a value within [minVal, maxVal] to a green→yellow→red HSL colour.
+  function relBarColor(val, minVal, maxVal) {
+    if (maxVal <= minVal) return 'hsl(120,70%,42%)';
+    const t = (val - minVal) / (maxVal - minVal); // 0 = best (green), 1 = worst (red)
+    const hue = Math.round(120 * (1 - t));        // 120=green, 60=yellow, 0=red
+    return `hsl(${hue},75%,42%)`;
+  }
 
   function hourProbabilities(alerts, totalDays) {
     const sets = Array.from({length: 24}, () => new Set());
@@ -1031,26 +1034,28 @@
     document.getElementById('rec-day').className  = `recommendation${minD > 30 ? ' warn' : ''}`;
 
     // Hour chart
+    const minC = Math.min(...combined_h);
     const maxC = Math.max(...combined_h, 0.1);
     document.getElementById('travel-hour-chart').innerHTML = combined_h.map((p, h) => {
       const heightPct = (p / maxC * 100).toFixed(1);
       const label = h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`;
       const title = `${String(h).padStart(2,'0')}:00 — סיכון משולב ${p.toFixed(1)}% (${from}: ${probA_h[h].toFixed(1)}% + ${to}: ${probB_h[h].toFixed(1)}%)`;
-      const highlight = h === bestH ? 'box-shadow:0 0 0 2px #4ade80;' : '';
+      const ring = h === bestH ? 'box-shadow:0 0 0 2px #fff4;' : '';
       return `<div class="hour-wrap" title="${title}">
-        <div class="hour-bar" style="height:${heightPct}%;background:${h === bestH ? '#4ade80' : barColor(p)};${highlight}"></div>
+        <div class="hour-bar" style="height:${heightPct}%;background:${relBarColor(p, minC, maxC)};${ring}"></div>
         <div class="hour-label">${label}</div>
       </div>`;
     }).join('');
 
     // DOW chart
+    const minD = Math.min(...combined_d);
     const maxD = Math.max(...combined_d, 0.1);
     document.getElementById('dow-chart').innerHTML = combined_d.map((p, i) => {
       const heightPct = (p / maxD * 100).toFixed(1);
       const title = `${DOW_NAMES[i]} — סיכון משולב ${p.toFixed(1)}%`;
       return `<div class="dow-wrap" title="${title}">
         <div class="dow-pct">${p.toFixed(0)}%</div>
-        <div class="dow-bar" style="height:${heightPct}%;background:${i === bestDow ? '#4ade80' : barColor(p)}"></div>
+        <div class="dow-bar" style="height:${heightPct}%;background:${relBarColor(p, minD, maxD)}"></div>
         <div class="dow-label">${DOW_SHORT[i]}</div>
       </div>`;
     }).join('');
