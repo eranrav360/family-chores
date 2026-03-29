@@ -13,25 +13,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 function fetchAlerts(mode, city, cfWorkerUrl) {
   if (cfWorkerUrl) {
     // Proxy through the CF Worker (runs from Israeli IP, not geo-blocked)
-    return new Promise((resolve) => {
-      let workerPath = `/history?mode=${mode}`;
-      if (city) workerPath += `&city=${encodeURIComponent(city)}`;
-      const fullUrl = new URL(workerPath, cfWorkerUrl);
-      const mod = fullUrl.protocol === 'https:' ? https : require('http');
-      const options = {
-        hostname: fullUrl.hostname,
-        path: fullUrl.pathname + fullUrl.search,
-        headers: { 'User-Agent': 'oref-risk/1.0' },
-      };
-      mod.get(options, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try { resolve(data.length > 2 ? JSON.parse(data) : []); }
-          catch { resolve([]); }
-        });
-      }).on('error', () => resolve([]));
-    });
+    // Use global fetch (Node 18+) — handles Cloudflare's TLS/HTTP2 better than https.get
+    return (async () => {
+      try {
+        let url = cfWorkerUrl.replace(/\/$/, '') + `/history?mode=${mode}`;
+        if (city) url += `&city=${encodeURIComponent(city)}`;
+        const resp = await fetch(url, { headers: { 'User-Agent': 'oref-risk/1.0' } });
+        const parsed = await resp.json();
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    })();
   }
 
   return new Promise((resolve, reject) => {
