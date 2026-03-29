@@ -113,7 +113,7 @@
     .btn:hover { background: #c1121f; }
     .btn:disabled { background: #444; cursor: not-allowed; }
 
-    #autocomplete-list {
+    #autocomplete-list, .autocomplete-dropdown {
       position: absolute;
       background: #1e2130;
       border: 1px solid #3a3d4a;
@@ -123,13 +123,14 @@
       overflow-y: auto;
       z-index: 100;
       min-width: 240px;
+      width: 100%;
     }
-    #autocomplete-list div {
+    #autocomplete-list div, .autocomplete-dropdown div {
       padding: 9px 14px;
       cursor: pointer;
       font-size: 13px;
     }
-    #autocomplete-list div:hover { background: #2a2d3a; }
+    #autocomplete-list div:hover, .autocomplete-dropdown div:hover { background: #2a2d3a; }
 
     .autocomplete-wrap { position: relative; flex: 1; min-width: 200px; }
 
@@ -260,6 +261,63 @@
       flex: 1; font-size: 8px; color: #555; text-align: center;
     }
 
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 8px;
+      color: #888;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover { border-color: #4a4d5a; color: #ccc; }
+    .tab-btn.active { background: #e63946; border-color: #e63946; color: #fff; }
+
+    /* Travel planner */
+    .route-inputs { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+    .route-inputs .autocomplete-wrap { flex: 1; min-width: 180px; }
+    .route-arrow { font-size: 20px; color: #555; padding-top: 9px; flex-shrink: 0; }
+
+    .recommendation {
+      background: #0f1f18;
+      border: 1px solid #1a4a2a;
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .recommendation .rec-icon { font-size: 32px; flex-shrink: 0; }
+    .recommendation .rec-body { flex: 1; }
+    .recommendation .rec-title { font-size: 12px; color: #4ade80; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .recommendation .rec-value { font-size: 26px; font-weight: 700; color: #fff; }
+    .recommendation .rec-sub { font-size: 12px; color: #888; margin-top: 4px; }
+    .recommendation.warn { background: #1f1a0f; border-color: #4a3a1a; }
+    .recommendation.warn .rec-title { color: #facc15; }
+
+    .rec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+
+    .dow-chart { display: flex; align-items: flex-end; gap: 6px; height: 90px; margin-top: 8px; }
+    .dow-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; cursor: default; }
+    .dow-wrap:hover .dow-bar { opacity: 0.75; }
+    .dow-bar { width: 100%; border-radius: 3px 3px 0 0; min-height: 2px; transition: opacity 0.15s; }
+    .dow-label { font-size: 10px; color: #666; }
+    .dow-pct { font-size: 9px; color: #888; }
+
+    .loc-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+    .loc-compare .stat-card .label { font-size: 11px; }
+    .loc-compare .stat-card .value { font-size: 22px; }
+
     /* Live alerts button */
     #live-btn {
       margin-left: auto;
@@ -328,6 +386,13 @@
 </div>
 
 <div class="container">
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('risk')">📍 Location Risk</button>
+    <button class="tab-btn" onclick="switchTab('travel')">🚗 Travel Planner</button>
+  </div>
+
+  <!-- ── Location Risk tab ─────────────────────────────────────────────── -->
+  <div id="tab-risk">
   <div class="search-card">
     <h2>Search Location</h2>
     <div class="search-row">
@@ -412,6 +477,73 @@
       <div class="timeline" id="timeline"></div>
     </div>
   </div>
+  </div><!-- /tab-risk -->
+
+  <!-- ── Travel Planner tab ─────────────────────────────────────────────── -->
+  <div id="tab-travel" style="display:none">
+    <div class="search-card">
+      <h2>Travel Planner</h2>
+      <div class="route-inputs">
+        <div class="autocomplete-wrap">
+          <input type="text" id="from-input" placeholder="From — location A (Hebrew)" autocomplete="off" />
+          <div id="from-autocomplete" class="autocomplete-dropdown" style="display:none;"></div>
+        </div>
+        <div class="route-arrow">→</div>
+        <div class="autocomplete-wrap">
+          <input type="text" id="to-input" placeholder="To — location B (Hebrew)" autocomplete="off" />
+          <div id="to-autocomplete" class="autocomplete-dropdown" style="display:none;"></div>
+        </div>
+        <select id="travel-mode-select">
+          <option value="2">Last 7 days</option>
+          <option value="4" selected>This month</option>
+          <option value="3">Last 30 days</option>
+        </select>
+        <button class="btn" id="travel-btn" onclick="runTravelSearch()">Find Best Time</button>
+      </div>
+      <div id="travel-status">Enter both locations to find the safest travel window</div>
+    </div>
+
+    <div id="travel-no-results" style="display:none; text-align:center; padding:40px; color:#888;">
+      <div style="font-size:48px;margin-bottom:12px;">🗺️</div>
+      <p>No alert data found for one or both locations in the selected period.</p>
+    </div>
+
+    <div id="travel-results" style="display:none">
+      <div class="rec-grid">
+        <div class="recommendation" id="rec-time">
+          <div class="rec-icon">🕐</div>
+          <div class="rec-body">
+            <div class="rec-title">Best Hour to Travel</div>
+            <div class="rec-value" id="rec-hour">—</div>
+            <div class="rec-sub" id="rec-hour-sub">—</div>
+          </div>
+        </div>
+        <div class="recommendation" id="rec-day">
+          <div class="rec-icon">📅</div>
+          <div class="rec-body">
+            <div class="rec-title">Safest Day of Week</div>
+            <div class="rec-value" id="rec-dow">—</div>
+            <div class="rec-sub" id="rec-dow-sub">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Combined Alert Risk by Hour of Day</h3>
+        <div class="hour-chart" id="travel-hour-chart"></div>
+      </div>
+
+      <div class="section">
+        <h3>Combined Alert Risk by Day of Week</h3>
+        <div class="dow-chart" id="dow-chart"></div>
+      </div>
+
+      <div class="section">
+        <h3>Individual Location Breakdown</h3>
+        <div class="loc-compare" id="loc-compare"></div>
+      </div>
+    </div>
+  </div><!-- /tab-travel -->
 </div>
 
 <script>
@@ -735,6 +867,210 @@
     settingsDialog.classList.remove('open');
   });
   settingsDialog.addEventListener('click', e => { if (e.target === settingsDialog) settingsDialog.classList.remove('open'); });
+
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    document.getElementById('tab-risk').style.display    = tab === 'risk'   ? '' : 'none';
+    document.getElementById('tab-travel').style.display  = tab === 'travel' ? '' : 'none';
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+      b.classList.toggle('active', (i === 0) === (tab === 'risk'));
+    });
+  }
+
+  // ── Travel planner autocomplete ────────────────────────────────────────────
+  function makeAutocomplete(inputId, dropdownId, onSelect) {
+    const input = document.getElementById(inputId);
+    const drop  = document.getElementById(dropdownId);
+    input.addEventListener('input', () => {
+      const val = input.value.trim();
+      if (!val) { drop.style.display = 'none'; return; }
+      const matches = allLocations.filter(l => l.includes(val)).slice(0, 10);
+      if (!matches.length) { drop.style.display = 'none'; return; }
+      drop.innerHTML = matches.map(m =>
+        `<div onclick="(${onSelect.toString()})('${m.replace(/'/g, "\\'")}')">${m}</div>`
+      ).join('');
+      drop.style.display = 'block';
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest(`#${inputId}`) && !e.target.closest(`#${dropdownId}`))
+        drop.style.display = 'none';
+    });
+  }
+  makeAutocomplete('from-input', 'from-autocomplete', name => {
+    document.getElementById('from-input').value = name;
+    document.getElementById('from-autocomplete').style.display = 'none';
+  });
+  makeAutocomplete('to-input', 'to-autocomplete', name => {
+    document.getElementById('to-input').value = name;
+    document.getElementById('to-autocomplete').style.display = 'none';
+  });
+
+  // ── Shared fetch helper ────────────────────────────────────────────────────
+  // Returns attack alerts (cat 1 + cat 6) for a given city and mode.
+  async function fetchAlertsForLocation(city, modeNum) {
+    const cfWorker = localStorage.getItem('orefCfWorkerUrl');
+    const apiMode = modeNum === 4 ? 3 : Math.min(Math.max(modeNum, 1), 3);
+    if (cfWorker) {
+      let url = cfWorker.replace(/\/$/, '') + `/history?mode=${apiMode}`;
+      if (city) url += `&city=${encodeURIComponent(city)}`;
+      const r = await fetch(url);
+      const raw = await r.json();
+      if (!Array.isArray(raw)) return [];
+      return processAlerts(raw, modeNum).alerts;
+    } else {
+      const params = new URLSearchParams({ mode: modeNum });
+      if (city) params.set('location', city);
+      const r = await fetch(`/api/history?${params}`);
+      const data = await r.json();
+      return data.alerts || [];
+    }
+  }
+
+  // ── Travel planner ─────────────────────────────────────────────────────────
+  async function runTravelSearch() {
+    const from   = document.getElementById('from-input').value.trim();
+    const to     = document.getElementById('to-input').value.trim();
+    const mode   = parseInt(document.getElementById('travel-mode-select').value) || 3;
+    const btn    = document.getElementById('travel-btn');
+    const status = document.getElementById('travel-status');
+
+    if (!from || !to) { status.textContent = 'Please enter both a departure and destination location.'; return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    status.textContent = `Fetching alert history for ${from} and ${to}…`;
+    document.getElementById('travel-results').style.display = 'none';
+    document.getElementById('travel-no-results').style.display = 'none';
+
+    try {
+      const [alertsA, alertsB] = await Promise.all([
+        fetchAlertsForLocation(from, mode),
+        fetchAlertsForLocation(to, mode),
+      ]);
+
+      // Use processAlerts just for the period label/days
+      const meta = processAlerts([], mode);
+      const totalDays = meta.periodDays;
+
+      if (!alertsA.length && !alertsB.length) {
+        status.textContent = `No alerts found for either location in the last ${meta.period}.`;
+        document.getElementById('travel-no-results').style.display = 'block';
+        return;
+      }
+
+      status.textContent = `${alertsA.length} alerts for ${from} · ${alertsB.length} alerts for ${to} in the last ${meta.period}`;
+      renderTravelResults(alertsA, alertsB, totalDays, from, to, meta.period);
+    } catch (e) {
+      status.textContent = `Error: ${e.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Find Best Time';
+    }
+  }
+
+  function hourLabel(h) {
+    return h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h - 12}:00 PM`;
+  }
+  const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const barColor  = p => p > 40 ? '#ef4444' : p > 20 ? '#dc2626' : p > 10 ? '#b91c1c' : p > 3 ? '#7f1d1d' : '#2a2030';
+  const barColorGood = p => p < 5 ? '#4ade80' : p < 15 ? '#a3e635' : p < 30 ? '#facc15' : p < 50 ? '#fb923c' : '#ef4444';
+
+  function hourProbabilities(alerts, totalDays) {
+    const sets = Array.from({length: 24}, () => new Set());
+    alerts.forEach(a => {
+      sets[parseInt((a.time || '00:00:00').split(':')[0])].add(a.alertDate.substring(0, 10));
+    });
+    return sets.map(s => (s.size / totalDays) * 100);
+  }
+
+  function dowProbabilities(alerts, totalDays) {
+    // Count how many occurrences of each DOW exist in the period
+    const dowCounts = Array(7).fill(0);
+    const today = new Date();
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      dowCounts[d.getDay()]++;
+    }
+    const sets = Array.from({length: 7}, () => new Set());
+    alerts.forEach(a => {
+      sets[new Date(a.alertDate).getDay()].add(a.alertDate.substring(0, 10));
+    });
+    return sets.map((s, i) => dowCounts[i] ? (s.size / dowCounts[i]) * 100 : 0);
+  }
+
+  function renderTravelResults(alertsA, alertsB, totalDays, from, to, period) {
+    const probA_h = hourProbabilities(alertsA, totalDays);
+    const probB_h = hourProbabilities(alertsB, totalDays);
+    const combined_h = probA_h.map((p, h) => p + probB_h[h]);
+
+    const probA_d = dowProbabilities(alertsA, totalDays);
+    const probB_d = dowProbabilities(alertsB, totalDays);
+    const combined_d = probA_d.map((p, i) => p + probB_d[i]);
+
+    // Best hour = lowest combined risk
+    const minH = Math.min(...combined_h);
+    const bestH = combined_h.indexOf(minH);
+
+    // Best DOW
+    const minD = Math.min(...combined_d);
+    const bestDow = combined_d.indexOf(minD);
+
+    // Recommendation cards
+    const maxH = Math.max(...combined_h, 0.1);
+    document.getElementById('rec-hour').textContent = hourLabel(bestH);
+    document.getElementById('rec-hour-sub').textContent =
+      `Combined risk: ${minH.toFixed(1)}% · Period: ${period}`;
+
+    document.getElementById('rec-dow').textContent = DOW_NAMES[bestDow];
+    document.getElementById('rec-dow-sub').textContent =
+      `Combined risk: ${minD.toFixed(1)}% · of days with an alert`;
+
+    // Style recommendation cards by risk level
+    document.getElementById('rec-time').className = `recommendation${minH > 30 ? ' warn' : ''}`;
+    document.getElementById('rec-day').className  = `recommendation${minD > 30 ? ' warn' : ''}`;
+
+    // Hour chart
+    const maxC = Math.max(...combined_h, 0.1);
+    document.getElementById('travel-hour-chart').innerHTML = combined_h.map((p, h) => {
+      const heightPct = (p / maxC * 100).toFixed(1);
+      const label = h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`;
+      const title = `${String(h).padStart(2,'0')}:00 — combined risk ${p.toFixed(1)}% (${from}: ${probA_h[h].toFixed(1)}% + ${to}: ${probB_h[h].toFixed(1)}%)`;
+      const highlight = h === bestH ? 'box-shadow:0 0 0 2px #4ade80;' : '';
+      return `<div class="hour-wrap" title="${title}">
+        <div class="hour-bar" style="height:${heightPct}%;background:${h === bestH ? '#4ade80' : barColor(p)};${highlight}"></div>
+        <div class="hour-label">${label}</div>
+      </div>`;
+    }).join('');
+
+    // DOW chart
+    const maxD = Math.max(...combined_d, 0.1);
+    document.getElementById('dow-chart').innerHTML = combined_d.map((p, i) => {
+      const heightPct = (p / maxD * 100).toFixed(1);
+      const title = `${DOW_NAMES[i]} — combined risk ${p.toFixed(1)}%`;
+      return `<div class="dow-wrap" title="${title}">
+        <div class="dow-pct">${p.toFixed(0)}%</div>
+        <div class="dow-bar" style="height:${heightPct}%;background:${i === bestDow ? '#4ade80' : barColor(p)}"></div>
+        <div class="dow-label">${DOW_NAMES[i].substring(0, 3)}</div>
+      </div>`;
+    }).join('');
+
+    // Per-location breakdown (avg alerts/day)
+    const avgA = alertsA.length / totalDays;
+    const avgB = alertsB.length / totalDays;
+    document.getElementById('loc-compare').innerHTML = `
+      <div class="stat-card">
+        <div class="label">${from}</div>
+        <div class="value">${alertsA.length}</div>
+        <div class="sub">${avgA.toFixed(2)} alerts/day · ${period}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">${to}</div>
+        <div class="value">${alertsB.length}</div>
+        <div class="sub">${avgB.toFixed(2)} alerts/day · ${period}</div>
+      </div>`;
+
+    document.getElementById('travel-results').style.display = 'block';
+  }
 </script>
 </body>
 </html>
