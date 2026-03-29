@@ -373,6 +373,8 @@
     try {
       const params = new URLSearchParams({ mode });
       if (location) params.set('location', location);
+      const cfWorker = localStorage.getItem('cfWorkerUrl');
+      if (cfWorker) params.set('cfWorker', cfWorker);
 
       const r = await fetch(`/api/history?${params}`);
       const data = await r.json();

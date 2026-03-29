@@ -9,7 +9,31 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // API modes: 1=24h, 2=7 days, 3=30 days
 // City filter uses city_0=name parameter (server-side filtered, bypasses 3000-record national cap)
-function fetchAlerts(mode, city) {
+// cfWorkerUrl: optional CF Worker base URL — used when oref history is geo-blocked from this server
+function fetchAlerts(mode, city, cfWorkerUrl) {
+  if (cfWorkerUrl) {
+    // Proxy through the CF Worker (runs from Israeli IP, not geo-blocked)
+    return new Promise((resolve) => {
+      let workerPath = `/history?mode=${mode}`;
+      if (city) workerPath += `&city=${encodeURIComponent(city)}`;
+      const fullUrl = new URL(workerPath, cfWorkerUrl);
+      const mod = fullUrl.protocol === 'https:' ? https : require('http');
+      const options = {
+        hostname: fullUrl.hostname,
+        path: fullUrl.pathname + fullUrl.search,
+        headers: { 'User-Agent': 'oref-risk/1.0' },
+      };
+      mod.get(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try { resolve(data.length > 2 ? JSON.parse(data) : []); }
+          catch { resolve([]); }
+        });
+      }).on('error', () => resolve([]));
+    });
+  }
+
   return new Promise((resolve, reject) => {
     let path = `/Shared/Ajax/GetAlarmsHistory.aspx?lang=he&mode=${mode}`;
     if (city) path += `&city_0=${encodeURIComponent(city)}`;
@@ -41,14 +65,15 @@ function fetchAlerts(mode, city) {
 // API: get alerts history
 // mode: 1=24h, 2=7d, 3=30d, 4=current month
 // location: optional city name (Hebrew)
+// cfWorker: optional CF Worker URL to proxy oref history through (needed when geo-blocked)
 app.get('/api/history', async (req, res) => {
   try {
-    const { location, mode = '3' } = req.query;
+    const { location, mode = '3', cfWorker } = req.query;
     const modeNum = parseInt(mode) || 3;
 
     // mode=4 means "current month": fetch last 30 days, then filter to 1st of this month
     const apiMode = modeNum === 4 ? 3 : Math.min(Math.max(modeNum, 1), 3);
-    const allAlerts = await fetchAlerts(apiMode, location || null);
+    const allAlerts = await fetchAlerts(apiMode, location || null, cfWorker || null);
 
     // Filter to rockets/missiles (cat 1) and UAV (cat 6) only
     let attackAlerts = allAlerts.filter(a => a.category === 1 || a.category === 6);

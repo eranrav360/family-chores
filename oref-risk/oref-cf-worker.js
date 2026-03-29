@@ -1,13 +1,18 @@
 /**
- * Cloudflare Worker — Oref real-time alert proxy
+ * Cloudflare Worker — Oref real-time alert + history proxy
  * ─────────────────────────────────────────────────────────────────────────────
  * WHY THIS EXISTS
- *   www.oref.org.il/WarningMessages/alert/alerts.json is geo-blocked to
+ *   www.oref.org.il and alerts-history.oref.org.il are geo-blocked to
  *   Israeli IPs only. All cloud servers (Vercel, Render, AWS…) are blocked.
  *
  *   Cloudflare has a PoP in Tel Aviv (TLV). When an Israeli browser hits this
  *   Worker, Cloudflare routes execution to TLV — so the outgoing fetch to
  *   oref.org.il originates from a real Israeli IP and is never blocked.
+ *
+ * ROUTES
+ *   GET /          → proxies alerts.json (real-time active alerts)
+ *   GET /history   → proxies GetAlarmsHistory.aspx (historical alert data)
+ *                    query params: mode (1/2/3), city (optional Hebrew name)
  *
  * DEPLOY (free, ~2 min)
  *   1. Go to https://dash.cloudflare.com → Workers & Pages → Create application
@@ -25,34 +30,71 @@ export default {
       return new Response(null, { headers: corsHeaders() });
     }
 
-    try {
-      const resp = await fetch(
-        'https://www.oref.org.il/WarningMessages/alert/alerts.json',
-        {
-          headers: {
-            'Referer': 'https://www.oref.org.il/',
-            'X-Requested-With': 'XMLHttpRequest',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-          },
-        }
-      );
+    const url = new URL(request.url);
 
-      const text = await resp.text();
-      const trimmed = text.trim();
-
-      // Empty body (or whitespace only) = no active alert right now
-      let alert = null;
-      if (trimmed && trimmed.length >= 5) {
-        try { alert = JSON.parse(trimmed); } catch { /* malformed — treat as no alert */ }
-      }
-
-      return jsonResponse({ alert });
-    } catch (e) {
-      return jsonResponse({ alert: null, error: e.message });
+    // Route: /history — proxy to alerts-history.oref.org.il
+    if (url.pathname === '/history') {
+      return handleHistory(url.searchParams);
     }
+
+    // Default route: proxy real-time alerts.json
+    return handleRealtime();
   },
 };
+
+async function handleRealtime() {
+  try {
+    const resp = await fetch(
+      'https://www.oref.org.il/WarningMessages/alert/alerts.json',
+      {
+        headers: {
+          'Referer': 'https://www.oref.org.il/',
+          'X-Requested-With': 'XMLHttpRequest',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+        },
+      }
+    );
+
+    const text = await resp.text();
+    const trimmed = text.trim();
+
+    // Empty body (or whitespace only) = no active alert right now
+    let alert = null;
+    if (trimmed && trimmed.length >= 5) {
+      try { alert = JSON.parse(trimmed); } catch { /* malformed — treat as no alert */ }
+    }
+
+    return jsonResponse({ alert });
+  } catch (e) {
+    return jsonResponse({ alert: null, error: e.message });
+  }
+}
+
+async function handleHistory(params) {
+  try {
+    const mode = params.get('mode') || '3';
+    const city = params.get('city') || '';
+
+    let path = `/Shared/Ajax/GetAlarmsHistory.aspx?lang=he&mode=${encodeURIComponent(mode)}`;
+    if (city) path += `&city_0=${encodeURIComponent(city)}`;
+
+    const resp = await fetch(`https://alerts-history.oref.org.il${path}`, {
+      headers: {
+        'Referer': 'https://alerts-history.oref.org.il/',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept-Encoding': 'identity',
+        'User-Agent': 'Mozilla/5.0',
+      },
+    });
+
+    const text = await resp.text();
+    const data = text.length > 2 ? JSON.parse(text) : [];
+    return jsonResponse(data);
+  } catch (e) {
+    return jsonResponse({ error: e.message });
+  }
+}
 
 function corsHeaders() {
   return {
