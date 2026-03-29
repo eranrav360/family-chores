@@ -84,7 +84,7 @@ app.get('/api/history', async (req, res) => {
 
 // Fetch all known cities from oref registry (1350 locations)
 function fetchCities() {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const options = {
       hostname: 'alerts-history.oref.org.il',
       path: '/Shared/Ajax/GetCities.aspx?lang=he',
@@ -100,20 +100,27 @@ function fetchCities() {
       res.on('end', () => {
         try {
           const cities = JSON.parse(data);
+          if (!Array.isArray(cities) || cities.length === 0) { resolve([]); return; }
           // label format: "cityName | areaName" — extract just the city name
           resolve(cities.map(c => c.label.split(' | ')[0]).sort());
         } catch (e) {
           resolve([]);
         }
       });
-    }).on('error', reject);
+    }).on('error', () => resolve([]));
   });
 }
 
 // API: get full city registry (not limited to recent alerts)
+// Falls back to unique cities from 30-day history if the cities API returns nothing
 app.get('/api/locations', async (req, res) => {
   try {
-    const locations = await fetchCities();
+    let locations = await fetchCities();
+    if (locations.length === 0) {
+      // Fallback: extract unique city names from 30-day history
+      const allAlerts = await fetchAlerts(3, null);
+      locations = [...new Set(allAlerts.map(a => a.data))].filter(Boolean).sort();
+    }
     res.json({ locations });
   } catch (e) {
     res.status(500).json({ error: e.message });
