@@ -90,6 +90,7 @@ export interface MemberStats {
   totalChores: number;
   totalPoints: number;
   mostCommonChore: { name: string; count: number } | null;
+  topChores: { name: string; count: number }[];
   busiestDay: { day: string; count: number } | null;
   uniqueChores: number;
   byDifficulty: { easy: number; medium: number; hard: number };

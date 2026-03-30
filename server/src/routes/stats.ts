@@ -45,6 +45,7 @@ router.get('/', async (req: Request, res: Response) => {
         totalChores: 0,
         totalPoints: 0,
         mostCommonChore: null,
+        topChores: [],
         busiestDay: null,
         uniqueChores: 0,
         byDifficulty: { easy: 0, medium: 0, hard: 0 },
@@ -61,8 +62,11 @@ router.get('/', async (req: Request, res: Response) => {
     for (const r of rows) {
       choreCounts[r.chore_name] = (choreCounts[r.chore_name] ?? 0) + 1;
     }
-    const [topChoreName, topChoreCount] = Object.entries(choreCounts).sort((a, b) => b[1] - a[1])[0];
-    const mostCommonChore = { name: topChoreName, count: topChoreCount };
+    const topChores = Object.entries(choreCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count }));
+    const mostCommonChore = topChores[0] ?? null;
 
     // Most busy day of week
     const dayCounts: Record<number, number> = {};
@@ -98,6 +102,7 @@ router.get('/', async (req: Request, res: Response) => {
       totalChores,
       totalPoints,
       mostCommonChore,
+      topChores,
       busiestDay,
       uniqueChores,
       byDifficulty,

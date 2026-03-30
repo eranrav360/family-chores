@@ -210,6 +210,35 @@ export default function StatsScreen() {
             )}
           </div>
 
+          {stats.topChores.length > 0 && (
+            <div className="card" style={{ padding: '14px 16px' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>🏅 5 המטלות המובילות</div>
+              {stats.topChores.map((chore, i) => {
+                const maxCount = stats.topChores[0].count;
+                return (
+                  <div key={chore.name} style={{ marginBottom: i < stats.topChores.length - 1 ? 10 : 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 14, fontWeight: i === 0 ? 700 : 400, color: 'var(--text)' }}>
+                        {i + 1}. {chore.name}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)', whiteSpace: 'nowrap', marginRight: 8 }}>
+                        {chore.count}×
+                      </span>
+                    </div>
+                    <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${(chore.count / maxCount) * 100}%`,
+                        background: i === 0 ? 'var(--primary)' : 'var(--primary-light)',
+                        borderRadius: 99,
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <DifficultyBar
             easy={stats.byDifficulty.easy}
             medium={stats.byDifficulty.medium}
