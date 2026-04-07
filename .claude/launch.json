@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "oref-risk",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["oref-risk/server.js"],
+      "port": 3459,
+      "autoPort": true
+    },
+    {
+      "name": "chores-client",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js", "run", "dev", "--", "--port", "5173"],
+      "port": 5173,
+      "cwd": "client"
+    }
+  ,{
+      "name": "memory-game",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "memory-game/frontend", "-p", "5174", "--no-clipboard"],
+      "port": 5174
+    }
+  ]
+}
