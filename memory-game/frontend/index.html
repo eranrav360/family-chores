@@ -112,9 +112,9 @@ body::before {
 .topic-card .t-name { font-size:12px; font-weight:600; color:var(--text); text-align:center; }
 
 /* Option rows */
-.opt-row { display:flex; gap:8px; width:100%; margin-bottom:20px; }
+.opt-row { display:flex; flex-wrap:wrap; gap:8px; width:100%; margin-bottom:20px; }
 .opt-btn {
-  flex:1; background:var(--surface); border:1.5px solid var(--border); border-radius:12px;
+  flex:1; min-width:52px; background:var(--surface); border:1.5px solid var(--border); border-radius:12px;
   padding:9px 4px; color:var(--muted); font-family:'Fredoka One',cursive; font-size:18px;
   cursor:pointer; transition:all 0.2s; text-align:center;
 }

@@ -18,8 +18,9 @@
   ,{
       "name": "memory-game",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "memory-game/frontend", "-p", "5174", "--no-clipboard"],
-      "port": 5174
+      "runtimeArgs": ["serve", "memory-game/frontend", "--no-clipboard"],
+      "port": 5174,
+      "autoPort": true
     }
   ]
 }
